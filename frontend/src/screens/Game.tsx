@@ -14,6 +14,7 @@ export const Game = () => {
   const socket = useSocket();
   const [chess, setChess] = useState(new Chess());
   const [board, setBoard] = useState(chess.board());
+  const [started, setStarted] = useState(false);
 
   useEffect(() => {
     if (!socket) return;
@@ -27,6 +28,7 @@ export const Game = () => {
           const newChess = new Chess();
           setChess(newChess);
           setBoard(newChess.board());
+          setStarted(true);
           break;
         }
         case MOVE: {
@@ -58,33 +60,52 @@ export const Game = () => {
   if (!socket) return <div>Connecting to server...</div>;
 
   return (
-    <div className="justify-center flex">
-      <div className="pt-8  max-w-5xl w-full">
-        <div className="grid grid-cols-8 gap-4 w-full">
-          {/* Chess Board Section */}
-          <div className="col-span-4 w-full flex justify-center">
-            <ChessBoard socket={socket} board={board} />
-          </div>
+  <div className="relative min-h-screen flex justify-center items-center bg-[#0e1117] overflow-hidden">
 
-          {/* Play Button Section */}
-          <div className="col-span-2 bg-slate-900 w-full flex justify-center">
-            <div className="pt-8">
+    {/* Soft spotlight glow */}
+    <div className="absolute w-225 h-225 bg-emerald-900/20 rounded-full blur-3xl z-0" />
+
+    <div className="relative pt-12 max-w-6xl w-full z-10">
+      <div className="grid grid-cols-6 gap-16 w-full">
+
+        {/* Chess Board Section */}
+        <div className="col-span-4 flex justify-center drop-shadow-[0_40px_80px_rgba(0,0,0,0.8)]">
+          <ChessBoard socket={socket} board={board} />
+        </div>
+
+        {/* Side Panel */}
+        <div className="col-span-2 
+                        bg-white/5 
+                        backdrop-blur-2xl 
+                        border border-white/10 
+                        rounded-3xl 
+                        shadow-[0_30px_80px_rgba(0,0,0,0.7)] 
+                        flex flex-col 
+                        items-center 
+                        justify-start 
+                        p-12">
+
+          <div className="pt-6 w-full flex justify-center">
+            {!started && (
               <Button
                 onClick={() => {
                   socket?.send(
                     JSON.stringify({
                       type: INIT_GAME,
-                    }),
+                    })
                   );
                 }}
               >
                 Play
               </Button>
-            </div>
-            //
+            )}
           </div>
+
         </div>
+
       </div>
     </div>
-  );
+  </div>
+);
+
 };
