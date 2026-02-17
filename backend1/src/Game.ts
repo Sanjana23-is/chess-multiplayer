@@ -1,5 +1,5 @@
 import WebSocket from "ws";
-import { Chess } from 'chess.js'
+import { Chess } from 'chess.js';
 import { GAME_OVER, INIT_GAME, MOVE } from "./messages";
 
 export class Game{
@@ -35,6 +35,7 @@ export class Game{
         from: string;
         to: string;
     }){
+        console.log("move received", move);
         //validate type of move using zod
         //validation here
         //is it this users move
@@ -47,8 +48,12 @@ export class Game{
         }
 
         try{
-            this.board.move(move);
-            this.moveCount++;
+            const result = this.board.move(move);
+                if (!result) {
+                    return;
+                }
+
+                this.moveCount++;
         }catch(e){
             console.log(e);
             return;
@@ -72,17 +77,25 @@ export class Game{
             return;
         }
 
-        //broadcast the move to both players
-        if(this.moveCount % 2 === 0){
-            this.player1.send(JSON.stringify({
-                type: MOVE,
-                payload: move
-            }))
-        }else{
-            this.player2.send(JSON.stringify({
-                type: MOVE,
-                payload: move
-            }))
+        // Broadcast the move and updated board state to both players
+        const boardState = this.board.board();
+        const fen = this.board.fen();
+
+        const payload = {
+            move,
+            board: boardState,
+            fen,
+        };
+
+        try {
+            this.player1.send(JSON.stringify({ type: MOVE, payload }));
+        } catch (e) {
+            console.warn('failed to send move to player1', e);
+        }
+        try {
+            this.player2.send(JSON.stringify({ type: MOVE, payload }));
+        } catch (e) {
+            console.warn('failed to send move to player2', e);
         }
        // this.moveCount++;
     }
