@@ -1,14 +1,17 @@
-//import { useEffect } from "react";
 import { Button } from "../components/Button";
 import { ChessBoard } from "../components/ChessBoard";
 import { useSocket } from "../hooks/useSocket";
 import { useEffect, useState } from "react";
 
-//TODO: Move together, there's code repetition between here and landing page
 export const INIT_GAME = "init_game";
 export const MOVE = "move";
 export const GAME_OVER = "game_over";
 import { Chess } from "chess.js";
+
+type GameResult = {
+  result: "checkmate" | "stalemate" | "draw";
+  winner: "white" | "black" | null;
+} | null;
 
 export const Game = () => {
   const socket = useSocket();
@@ -16,26 +19,26 @@ export const Game = () => {
   const [board, setBoard] = useState(chess.board());
   const [started, setStarted] = useState(false);
   const [myColor, setMyColor] = useState<"white" | "black" | null>(null);
-  const [waiting, setWaiting] = useState(false); // true after clicking Play, before INIT_GAME received
+  const [waiting, setWaiting] = useState(false);
+  const [gameResult, setGameResult] = useState<GameResult>(null);
 
   // Derived: is it currently this player's turn?
   const isMyTurn =
+    gameResult === null &&  // no moves allowed once game is over
     myColor !== null &&
     ((chess.turn() === "w" && myColor === "white") ||
       (chess.turn() === "b" && myColor === "black"));
 
   // Reset game state only when the socket disconnects (goes to null).
-  // We do NOT reset when a new socket appears — that caused the StrictMode bug
-  // where mount1 socket sent INIT_GAME, then mount2 re-showed Play and sent it
-  // again, pairing mount2 with mount1's closed socket (both ending up as black).
   useEffect(() => {
-    if (socket !== null) return; // only act on disconnect
+    if (socket !== null) return;
     const freshChess = new Chess();
     setChess(freshChess);
     setBoard(freshChess.board());
     setStarted(false);
     setMyColor(null);
     setWaiting(false);
+    setGameResult(null);
   }, [socket]);
 
   useEffect(() => {
@@ -51,11 +54,11 @@ export const Game = () => {
           setBoard(newChess.board());
           setStarted(true);
           setWaiting(false);
+          setGameResult(null);
           setMyColor(message.payload.color as "white" | "black");
           break;
         }
         case MOVE: {
-          // authoritative update from server — require fen or board
           const payload = message.payload;
           if (payload?.fen) {
             const newChess = new Chess(payload.fen);
@@ -63,15 +66,21 @@ export const Game = () => {
             setBoard(newChess.board());
           } else if (payload?.board) {
             setBoard(payload.board);
-          } else {
-            console.warn("MOVE received without fen/board payload");
           }
-
           break;
         }
         case GAME_OVER: {
-          //handle game over
-          console.log("game over");
+          const payload = message.payload;
+          // Update board to final position if included
+          if (payload?.fen) {
+            const finalChess = new Chess(payload.fen);
+            setChess(finalChess);
+            setBoard(finalChess.board());
+          }
+          setGameResult({
+            result: payload.result,
+            winner: payload.winner ?? null,
+          });
           break;
         }
       }
@@ -82,7 +91,7 @@ export const Game = () => {
 
   if (!socket) return <div>Connecting to server...</div>;
 
-  // Turn indicator text
+  // Turn indicator
   const turnLabel = !started
     ? "Waiting for opponent…"
     : isMyTurn
@@ -95,6 +104,17 @@ export const Game = () => {
       ? "text-emerald-400"
       : "text-gray-400";
 
+  // Game-over result label
+  const resultHeading = gameResult
+    ? gameResult.result === "checkmate"
+      ? gameResult.winner === myColor
+        ? "🏆 You won!"
+        : "💀 You lost"
+      : gameResult.result === "stalemate"
+        ? "🤝 Stalemate"
+        : "🤝 Draw"
+    : null;
+
   return (
     <div className="relative min-h-screen flex justify-center items-center bg-[#0e1117] overflow-hidden">
 
@@ -104,7 +124,7 @@ export const Game = () => {
       <div className="relative pt-12 max-w-6xl w-full z-10">
         <div className="grid grid-cols-6 gap-16 w-full">
 
-          {/* Chess Board Section */}
+          {/* Chess Board */}
           <div className="col-span-4 flex justify-center drop-shadow-[0_40px_80px_rgba(0,0,0,0.8)]">
             <ChessBoard
               socket={socket}
@@ -116,18 +136,48 @@ export const Game = () => {
 
           {/* Side Panel */}
           <div className="col-span-2 
-                        bg-white/5 
-                        backdrop-blur-2xl 
-                        border border-white/10 
-                        rounded-3xl 
-                        shadow-[0_30px_80px_rgba(0,0,0,0.7)] 
-                        flex flex-col 
-                        items-center 
-                        justify-start 
-                        p-12">
+                          bg-white/5 
+                          backdrop-blur-2xl 
+                          border border-white/10 
+                          rounded-3xl 
+                          shadow-[0_30px_80px_rgba(0,0,0,0.7)] 
+                          flex flex-col 
+                          items-center 
+                          justify-start 
+                          p-12">
 
-            {/* Turn indicator */}
-            {started && (
+            {/* Game-over overlay card */}
+            {gameResult && (
+              <div className="mb-6 w-full text-center bg-white/10 border border-white/20 rounded-2xl p-6">
+                <div className="text-3xl font-bold text-white mb-2">
+                  {resultHeading}
+                </div>
+                {gameResult.result === "checkmate" && gameResult.winner && (
+                  <div className="text-sm text-gray-400 mb-4">
+                    <span className="capitalize font-semibold text-white">{gameResult.winner}</span> wins by checkmate
+                  </div>
+                )}
+                {(gameResult.result === "stalemate" || gameResult.result === "draw") && (
+                  <div className="text-sm text-gray-400 mb-4 capitalize">
+                    {gameResult.result}
+                  </div>
+                )}
+                <Button
+                  onClick={() => {
+                    if (waiting) return;
+                    setWaiting(true);
+                    setGameResult(null);
+                    setStarted(false);
+                    socket?.send(JSON.stringify({ type: INIT_GAME }));
+                  }}
+                >
+                  {waiting ? "Finding opponent…" : "Play Again"}
+                </Button>
+              </div>
+            )}
+
+            {/* Turn indicator (only while playing) */}
+            {started && !gameResult && (
               <div className={`mb-6 text-lg font-semibold tracking-wide ${turnColor}`}>
                 {turnLabel}
               </div>
@@ -140,17 +190,14 @@ export const Game = () => {
               </div>
             )}
 
+            {/* Play button (pre-game) */}
             <div className="pt-6 w-full flex justify-center">
-              {!started && (
+              {!started && !gameResult && (
                 <Button
                   onClick={() => {
-                    if (waiting) return; // prevent duplicate sends
+                    if (waiting) return;
                     setWaiting(true);
-                    socket?.send(
-                      JSON.stringify({
-                        type: INIT_GAME,
-                      })
-                    );
+                    socket?.send(JSON.stringify({ type: INIT_GAME }));
                   }}
                 >
                   {waiting ? "Finding opponent…" : "Play"}
