@@ -1,60 +1,46 @@
 import { useEffect, useState } from "react";
 
-const WS_URL = (typeof window !== 'undefined' && window.location.protocol === 'https:') ? `wss://${window.location.host}` : 'ws://localhost:8080';
+const WS_URL = (typeof window !== 'undefined' && window.location.protocol === 'https:')
+  ? `wss://${window.location.host}`
+  : 'ws://localhost:8080';
 
-declare global {
-  interface Window {
-    __CHESS_WS?: WebSocket;
-  }
-}
+const RECONNECT_DELAY_MS = 2000;
 
 export const useSocket = () => {
-  const [socket, setSocket] = useState<WebSocket | null>(() => {
-    if (typeof window !== 'undefined' && window.__CHESS_WS) return window.__CHESS_WS;
-    return null;
-  });
+  const [socket, setSocket] = useState<WebSocket | null>(null);
 
   useEffect(() => {
-    // read global directly to avoid stale closure lint warnings
-    let ws = (typeof window !== 'undefined' && window.__CHESS_WS) ? window.__CHESS_WS : null;
+    let ws: WebSocket;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let isCleaning = false; // set to true when the component unmounts
 
-    if (!ws) {
+    const connect = () => {
       ws = new WebSocket(WS_URL);
-      if (typeof window !== 'undefined') window.__CHESS_WS = ws;
-    }
 
-    const handleOpen = () => setSocket(ws as WebSocket);
-    const handleClose = () => {
-      console.log('WebSocket closed');
-      setSocket(null);
+      ws.addEventListener('open', () => {
+        if (!isCleaning) setSocket(ws);
+      });
+
+      ws.addEventListener('close', () => {
+        if (isCleaning) return; // don't reconnect on intentional cleanup
+        setSocket(null);
+        // Auto-reconnect after a short delay
+        reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
+      });
+
+      ws.addEventListener('error', () => {
+        // Let the 'close' event handle reconnection
+      });
     };
 
-    ws.addEventListener('open', handleOpen);
-    ws.addEventListener('close', handleClose);
+    connect();
 
-    const cleanup = () => {
-      try {
-        ws?.removeEventListener('open', handleOpen);
-        ws?.removeEventListener('close', handleClose);
-      } catch {
-        /* ignored */
-      }
-    };
-
-    const beforeUnload = () => {
-      try {
-        ws?.close();
-        if (typeof window !== 'undefined') window.__CHESS_WS = undefined;
-      } catch {
-        /* ignored */
-      }
-    };
-
-    window.addEventListener('beforeunload', beforeUnload);
-
+    // Cleanup: close the socket and cancel any pending reconnect
     return () => {
-      window.removeEventListener('beforeunload', beforeUnload);
-      cleanup();
+      isCleaning = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      ws?.close();
+      setSocket(null);
     };
   }, []);
 
