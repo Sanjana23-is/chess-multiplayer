@@ -33,12 +33,16 @@ export const Game = () => {
   useEffect(() => {
     if (socket !== null) return;
     const freshChess = new Chess();
-    setChess(freshChess);
-    setBoard(freshChess.board());
-    setStarted(false);
-    setMyColor(null);
-    setWaiting(false);
-    setGameResult(null);
+    // Avoid calling setState synchronously inside the effect body —
+    // schedule the resets asynchronously so we don't trigger cascading renders.
+    setTimeout(() => {
+      setChess(freshChess);
+      setBoard(freshChess.board());
+      setStarted(false);
+      setMyColor(null);
+      setWaiting(false);
+      setGameResult(null);
+    }, 0);
   }, [socket]);
 
   useEffect(() => {
