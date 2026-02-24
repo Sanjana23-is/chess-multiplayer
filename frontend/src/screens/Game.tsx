@@ -1,219 +1,248 @@
-import { Button } from "../components/Button";
 import { ChessBoard } from "../components/ChessBoard";
 import { useSocket } from "../hooks/useSocket";
 import { useEffect, useState } from "react";
+import { Chess } from "chess.js";
 
 export const INIT_GAME = "init_game";
 export const MOVE = "move";
 export const GAME_OVER = "game_over";
-import { Chess } from "chess.js";
+export const REJOIN_GAME = "rejoin_game";
+export const OPPONENT_DISCONNECTED = "opponent_disconnected";
 
 type GameResult = {
-  result: "checkmate" | "stalemate" | "draw";
+  result: "checkmate" | "stalemate" | "draw" | "abandoned";
   winner: "white" | "black" | null;
 } | null;
 
+type MoveHistoryItem = {
+  from: string;
+  to: string;
+  piece: string;
+  color: "w" | "b";
+  captured?: string | null;
+  promotion?: string | null;
+};
+
 export const Game = () => {
   const socket = useSocket();
-  const [chess, setChess] = useState(new Chess());
-  const [board, setBoard] = useState(chess.board());
-  const [started, setStarted] = useState(false);
-  const [myColor, setMyColor] = useState<"white" | "black" | null>(null);
-  const [waiting, setWaiting] = useState(false);
-  const [gameResult, setGameResult] = useState<GameResult>(null);
 
-  // Derived: is it currently this player's turn?
-  const isMyTurn =
-    gameResult === null &&  // no moves allowed once game is over
-    myColor !== null &&
-    ((chess.turn() === "w" && myColor === "white") ||
-      (chess.turn() === "b" && myColor === "black"));
-
-  // Reset game state only when the socket disconnects (goes to null).
+  // Auto start game when socket connects
   useEffect(() => {
-    if (socket !== null) return;
-    const freshChess = new Chess();
-    // Avoid calling setState synchronously inside the effect body —
-    // schedule the resets asynchronously so we don't trigger cascading renders.
-    setTimeout(() => {
-      setChess(freshChess);
-      setBoard(freshChess.board());
-      setStarted(false);
-      setMyColor(null);
-      setWaiting(false);
-      setGameResult(null);
-    }, 0);
+    if (!socket) return;
+    socket.send(JSON.stringify({ type: INIT_GAME }));
   }, [socket]);
 
+  const [chess, setChess] = useState(new Chess());
+  const [board, setBoard] = useState(chess.board());
+  const [myColor, setMyColor] = useState<"white" | "black" | null>(null);
+  const [gameResult, setGameResult] = useState<GameResult>(null);
+  const [moveHistory, setMoveHistory] = useState<MoveHistoryItem[]>([]);
+  const [capturedWhite, setCapturedWhite] = useState<string[]>([]);
+  const [capturedBlack, setCapturedBlack] = useState<string[]>([]);
+
+  // ===============================
+  // SOCKET MESSAGE HANDLER
+  // ===============================
   useEffect(() => {
     if (!socket) return;
 
-    const handleMessage = (event: Event) => {
-      const message = JSON.parse((event as MessageEvent).data);
+    const handleMessage = (event: MessageEvent) => {
+      const message = JSON.parse(event.data);
 
       switch (message.type) {
+
         case INIT_GAME: {
-          const newChess = new Chess();
+          const fen = message.payload?.fen;
+          const newChess = fen ? new Chess(fen) : new Chess();
+
           setChess(newChess);
           setBoard(newChess.board());
-          setStarted(true);
-          setWaiting(false);
           setGameResult(null);
-          setMyColor(message.payload.color as "white" | "black");
+          setMoveHistory([]);
+          setCapturedWhite([]);
+          setCapturedBlack([]);
+
+          if (message.payload?.color) {
+            setMyColor(message.payload.color);
+          }
+
           break;
         }
+
         case MOVE: {
           const payload = message.payload;
+
           if (payload?.fen) {
             const newChess = new Chess(payload.fen);
             setChess(newChess);
             setBoard(newChess.board());
-          } else if (payload?.board) {
-            setBoard(payload.board);
           }
+
+          if (payload?.move) {
+            const move = payload.move;
+
+            setMoveHistory(prev => [...prev, move]);
+
+            if (move.captured) {
+              if (move.color === "w") {
+                setCapturedBlack(prev => [...prev, move.captured]);
+              } else {
+                setCapturedWhite(prev => [...prev, move.captured]);
+              }
+            }
+          }
+
           break;
         }
+
         case GAME_OVER: {
-          const payload = message.payload;
-          // Update board to final position if included
-          if (payload?.fen) {
-            const finalChess = new Chess(payload.fen);
-            setChess(finalChess);
-            setBoard(finalChess.board());
-          }
           setGameResult({
-            result: payload.result,
-            winner: payload.winner ?? null,
+            result: message.payload.result,
+            winner: message.payload.winner ?? null,
+          });
+          break;
+        }
+
+        case OPPONENT_DISCONNECTED: {
+          setGameResult({
+            result: "abandoned",
+            winner: myColor,
           });
           break;
         }
       }
     };
+
     socket.addEventListener("message", handleMessage);
     return () => socket.removeEventListener("message", handleMessage);
-  }, [socket]);
+  }, [socket, myColor]);
 
-  if (!socket) return <div>Connecting to server...</div>;
+  if (!socket) return <div>Connecting...</div>;
 
-  // Turn indicator
-  const turnLabel = !started
-    ? "Waiting for opponent…"
-    : isMyTurn
-      ? "♟ Your turn"
-      : "⏳ Opponent's turn";
+  // ===============================
+  // MATERIAL CALCULATION
+  // ===============================
+  const pieceValue: Record<string, number> = {
+    p: 1,
+    n: 3,
+    b: 3,
+    r: 5,
+    q: 9,
+  };
 
-  const turnColor = !started
-    ? "text-gray-400"
-    : isMyTurn
-      ? "text-emerald-400"
-      : "text-gray-400";
+  const whiteScore = capturedBlack.reduce(
+    (sum, p) => sum + (pieceValue[p] ?? 0),
+    0
+  );
 
-  // Game-over result label
-  const resultHeading = gameResult
-    ? gameResult.result === "checkmate"
-      ? gameResult.winner === myColor
-        ? "🏆 You won!"
-        : "💀 You lost"
-      : gameResult.result === "stalemate"
-        ? "🤝 Stalemate"
-        : "🤝 Draw"
-    : null;
+  const blackScore = capturedWhite.reduce(
+    (sum, p) => sum + (pieceValue[p] ?? 0),
+    0
+  );
+
+  const materialDiff = whiteScore - blackScore;
+
+  // ===============================
+  // TURN LOGIC
+  // ===============================
+  const isMyTurn =
+    gameResult === null &&
+    myColor !== null &&
+    ((chess.turn() === "w" && myColor === "white") ||
+     (chess.turn() === "b" && myColor === "black"));
 
   return (
-    <div className="relative min-h-screen flex justify-center items-center bg-[#0e1117] overflow-hidden">
+    <div className="min-h-screen flex justify-center items-center bg-[#0e1117]">
+      <div className="grid grid-cols-6 gap-16 max-w-6xl w-full">
 
-      {/* Soft spotlight glow */}
-      <div className="absolute w-225 h-225 bg-emerald-900/20 rounded-full blur-3xl z-0" />
+        {/* BOARD AREA */}
+        <div className="col-span-4 flex flex-col items-center">
 
-      <div className="relative pt-12 max-w-6xl w-full z-10">
-        <div className="grid grid-cols-6 gap-16 w-full">
-
-          {/* Chess Board */}
-          <div className="col-span-4 flex justify-center drop-shadow-[0_40px_80px_rgba(0,0,0,0.8)]">
-            <ChessBoard
-              socket={socket}
-              board={board}
-              myColor={myColor ?? "white"}
-              isMyTurn={isMyTurn}
-            />
+          {/* Captured Black Pieces */}
+          <div className="flex gap-1 mb-2 h-6 items-center">
+            {capturedBlack.map((piece, i) => (
+              <img
+                key={i}
+                src={`/pieces/b${piece.toUpperCase()}.webp`}
+                className="w-6 h-6"
+              />
+            ))}
+            {materialDiff > 0 && (
+              <span className="text-green-400 ml-2 text-sm">
+                +{materialDiff}
+              </span>
+            )}
           </div>
 
-          {/* Side Panel */}
-          <div className="col-span-2 
-                          bg-white/5 
-                          backdrop-blur-2xl 
-                          border border-white/10 
-                          rounded-3xl 
-                          shadow-[0_30px_80px_rgba(0,0,0,0.7)] 
-                          flex flex-col 
-                          items-center 
-                          justify-start 
-                          p-12">
-
-            {/* Game-over overlay card */}
-            {gameResult && (
-              <div className="mb-6 w-full text-center bg-white/10 border border-white/20 rounded-2xl p-6">
-                <div className="text-3xl font-bold text-white mb-2">
-                  {resultHeading}
-                </div>
-                {gameResult.result === "checkmate" && gameResult.winner && (
-                  <div className="text-sm text-gray-400 mb-4">
-                    <span className="capitalize font-semibold text-white">{gameResult.winner}</span> wins by checkmate
-                  </div>
-                )}
-                {(gameResult.result === "stalemate" || gameResult.result === "draw") && (
-                  <div className="text-sm text-gray-400 mb-4 capitalize">
-                    {gameResult.result}
-                  </div>
-                )}
-                <Button
-                  onClick={() => {
-                    if (waiting) return;
-                    setWaiting(true);
-                    setGameResult(null);
-                    setStarted(false);
-                    socket?.send(JSON.stringify({ type: INIT_GAME }));
-                  }}
-                >
-                  {waiting ? "Finding opponent…" : "Play Again"}
-                </Button>
+          {/* TURN INFO */}
+          {myColor && (
+            <div className="mb-4 text-center">
+              <div className="text-sm text-white/70">
+                You are <span className="font-bold">{myColor}</span>
               </div>
-            )}
 
-            {/* Turn indicator (only while playing) */}
-            {started && !gameResult && (
-              <div className={`mb-6 text-lg font-semibold tracking-wide ${turnColor}`}>
-                {turnLabel}
+              <div className={isMyTurn ? "text-emerald-400 font-semibold" : "text-gray-400 font-semibold"}>
+                {isMyTurn ? "♟ Your turn" : "⏳ Opponent's turn"}
               </div>
-            )}
-
-            {/* Color badge */}
-            {started && myColor && (
-              <div className="mb-4 px-4 py-1 rounded-full text-sm font-medium border border-white/20 text-white/70">
-                You are <span className={myColor === "white" ? "text-white font-bold" : "text-gray-400 font-bold"}>{myColor}</span>
-              </div>
-            )}
-
-            {/* Play button (pre-game) */}
-            <div className="pt-6 w-full flex justify-center">
-              {!started && !gameResult && (
-                <Button
-                  onClick={() => {
-                    if (waiting) return;
-                    setWaiting(true);
-                    socket?.send(JSON.stringify({ type: INIT_GAME }));
-                  }}
-                >
-                  {waiting ? "Finding opponent…" : "Play"}
-                </Button>
-              )}
             </div>
+          )}
 
+          <ChessBoard
+            socket={socket}
+            board={board}
+            myColor={myColor ?? "white"}
+            isMyTurn={isMyTurn}
+          />
+
+          {/* Captured White Pieces */}
+          <div className="flex gap-1 mt-2 h-6 items-center">
+            {capturedWhite.map((piece, i) => (
+              <img
+                key={i}
+                src={`/pieces/w${piece.toUpperCase()}.webp`}
+                className="w-6 h-6"
+              />
+            ))}
+            {materialDiff < 0 && (
+              <span className="text-green-400 ml-2 text-sm">
+                +{Math.abs(materialDiff)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* MOVE PANEL */}
+        <div className="col-span-2 bg-white/5 border border-white/10 rounded-2xl p-6">
+
+          <div className="text-lg font-semibold mb-4 text-white/80">
+            Moves
+          </div>
+
+          <div className="max-h-96 overflow-y-auto space-y-2 text-sm">
+            {Array.from({ length: Math.ceil(moveHistory.length / 2) }).map((_, i) => {
+              const whiteMove = moveHistory[i * 2];
+              const blackMove = moveHistory[i * 2 + 1];
+
+              return (
+                <div key={i} className="flex gap-4">
+                  <span className="text-gray-400 w-6">
+                    {i + 1}.
+                  </span>
+
+                  <span className="flex-1">
+                    {whiteMove ? `${whiteMove.from} → ${whiteMove.to}` : ""}
+                  </span>
+
+                  <span className="flex-1">
+                    {blackMove ? `${blackMove.from} → ${blackMove.to}` : ""}
+                  </span>
+                </div>
+              );
+            })}
           </div>
 
         </div>
       </div>
     </div>
   );
-
 };
