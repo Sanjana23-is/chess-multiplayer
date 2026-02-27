@@ -1,12 +1,16 @@
 import WebSocket from "ws";
 import { Chess } from "chess.js";
 import {
+    ACCEPT_DRAW,
     GAME_OVER,
     INIT_GAME,
     MOVE,
+    OFFER_DRAW,
     OPPONENT_DISCONNECTED,
+    REJECT_DRAW,
+    RESIGN,
 } from "./messages";
-import { prisma } from "./prisma";
+import { prisma } from "./prisma"; // @ts-ignore - force TS Server refresh
 
 export class Game {
     public player1: WebSocket; // white
@@ -19,6 +23,9 @@ export class Game {
     public blackTime: number;
     private timer: NodeJS.Timeout | null = null;
     private lastMoveTime: number | null = null;
+
+    // Draw offer tracking
+    private drawOfferBy: "white" | "black" | null = null;
 
     constructor(
         player1: WebSocket,
@@ -274,6 +281,82 @@ export class Game {
         this.safeSend(opponent, OPPONENT_DISCONNECTED, {
             message: "Opponent disconnected",
         });
+    }
+
+    // ============================
+    // Resign & Draw Features
+    // ============================
+    async resign(socket: WebSocket) {
+        if (this.timer) clearInterval(this.timer);
+
+        const loserColor = socket === this.player1 ? "white" : "black";
+        const winnerColor = loserColor === "white" ? "black" : "white";
+
+        try {
+            await prisma.game.update({
+                where: { id: this.id },
+                data: {
+                    status: "FINISHED",
+                    result: "resignation",
+                    winner: winnerColor,
+                },
+            });
+        } catch (err) {
+            console.error("Failed to commit resignation:", err);
+        }
+
+        this.broadcast(GAME_OVER, {
+            result: "resignation",
+            winner: winnerColor,
+            fen: this.board.fen(),
+            board: this.board.board(),
+        });
+    }
+
+    offerDraw(socket: WebSocket) {
+        const color = socket === this.player1 ? "white" : "black";
+        this.drawOfferBy = color;
+
+        const opponent = socket === this.player1 ? this.player2 : this.player1;
+        this.safeSend(opponent, OFFER_DRAW, { proposer: color });
+    }
+
+    async acceptDraw(socket: WebSocket) {
+        const color = socket === this.player1 ? "white" : "black";
+
+        // Validate that there is an active offer from the OPPONENT
+        if (this.drawOfferBy === color || this.drawOfferBy === null) {
+            return;
+        }
+
+        if (this.timer) clearInterval(this.timer);
+
+        try {
+            await prisma.game.update({
+                where: { id: this.id },
+                data: {
+                    status: "FINISHED",
+                    result: "draw_agreed",
+                    winner: null,
+                },
+            });
+        } catch (err) {
+            console.error("Failed to commit agreed draw:", err);
+        }
+
+        this.broadcast(GAME_OVER, {
+            result: "draw_agreed",
+            winner: null,
+            fen: this.board.fen(),
+            board: this.board.board(),
+        });
+    }
+
+    rejectDraw(socket: WebSocket) {
+        this.drawOfferBy = null; // Clear the offer
+
+        const opponent = socket === this.player1 ? this.player2 : this.player1;
+        this.safeSend(opponent, REJECT_DRAW, { message: "Draw rejected" });
     }
 
     private broadcast(type: string, payload: any) {

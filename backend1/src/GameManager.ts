@@ -1,5 +1,5 @@
 import { WebSocket } from "ws";
-import { INIT_GAME, MOVE, REJOIN_GAME } from "./messages";
+import { INIT_GAME, MOVE, REJOIN_GAME, RESIGN, OFFER_DRAW, ACCEPT_DRAW, REJECT_DRAW } from "./messages";
 import { Game } from "./Game";
 import { prisma } from "./prisma";
 
@@ -148,6 +148,54 @@ export class GameManager {
 
           this.games.set(gameId, recoveredGame);
           return;
+        }
+
+        // ======================
+        // RESIGN
+        // ======================
+        if (message.type === RESIGN) {
+          for (const game of this.games.values()) {
+            if (game.player1 === socket || game.player2 === socket) {
+              await game.resign(socket);
+              return;
+            }
+          }
+        }
+
+        // ======================
+        // OFFER DRAW
+        // ======================
+        if (message.type === OFFER_DRAW) {
+          for (const game of this.games.values()) {
+            if (game.player1 === socket || game.player2 === socket) {
+              game.offerDraw(socket);
+              return;
+            }
+          }
+        }
+
+        // ======================
+        // ACCEPT DRAW
+        // ======================
+        if (message.type === ACCEPT_DRAW) {
+          for (const game of this.games.values()) {
+            if (game.player1 === socket || game.player2 === socket) {
+              await game.acceptDraw(socket);
+              return;
+            }
+          }
+        }
+
+        // ======================
+        // REJECT DRAW
+        // ======================
+        if (message.type === REJECT_DRAW) {
+          for (const game of this.games.values()) {
+            if (game.player1 === socket || game.player2 === socket) {
+              game.rejectDraw(socket);
+              return;
+            }
+          }
         }
 
       } catch (error) {

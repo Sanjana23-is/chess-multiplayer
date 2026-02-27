@@ -3,3 +3,7 @@ export const MOVE = "move";
 export const GAME_OVER = "game_over";
 export const REJOIN_GAME = "rejoin_game";
 export const OPPONENT_DISCONNECTED = "opponent_disconnected";
+export const RESIGN = "resign";
+export const OFFER_DRAW = "offer_draw";
+export const ACCEPT_DRAW = "accept_draw";
+export const REJECT_DRAW = "reject_draw";

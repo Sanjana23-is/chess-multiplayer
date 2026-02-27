@@ -9,9 +9,13 @@ export const MOVE = "move";
 export const GAME_OVER = "game_over";
 export const REJOIN_GAME = "rejoin_game";
 export const OPPONENT_DISCONNECTED = "opponent_disconnected";
+export const RESIGN = "resign";
+export const OFFER_DRAW = "offer_draw";
+export const ACCEPT_DRAW = "accept_draw";
+export const REJECT_DRAW = "reject_draw";
 
 type GameResult = {
-  result: "checkmate" | "stalemate" | "draw" | "abandoned" | "timeout";
+  result: "checkmate" | "stalemate" | "draw" | "abandoned" | "timeout" | "resignation" | "draw_agreed";
   winner: "white" | "black" | null;
 } | null;
 
@@ -41,6 +45,10 @@ export const Game = () => {
   const [capturedWhite, setCapturedWhite] = useState<string[]>([]);
   const [capturedBlack, setCapturedBlack] = useState<string[]>([]);
 
+  // Draw State
+  const [drawOfferReceived, setDrawOfferReceived] = useState(false);
+  const [showDrawRejectedToast, setShowDrawRejectedToast] = useState(false);
+
   // Clocks state
   const [whiteTime, setWhiteTime] = useState<number>(600000); // 10 minutes default
   const [blackTime, setBlackTime] = useState<number>(600000);
@@ -66,6 +74,7 @@ export const Game = () => {
           setMoveHistory([]);
           setCapturedWhite([]);
           setCapturedBlack([]);
+          setDrawOfferReceived(false);
 
           if (message.payload?.color) {
             setMyColor(message.payload.color);
@@ -119,6 +128,7 @@ export const Game = () => {
             result: message.payload.result,
             winner: message.payload.winner ?? null,
           });
+          setDrawOfferReceived(false);
           break;
         }
 
@@ -127,6 +137,18 @@ export const Game = () => {
             result: "abandoned",
             winner: myColor,
           });
+          setDrawOfferReceived(false);
+          break;
+        }
+
+        case OFFER_DRAW: {
+          setDrawOfferReceived(true);
+          break;
+        }
+
+        case REJECT_DRAW: {
+          setShowDrawRejectedToast(true);
+          setTimeout(() => setShowDrawRejectedToast(false), 3000);
           break;
         }
       }
@@ -216,14 +238,17 @@ export const Game = () => {
                   ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                   : gameResult.result === "abandoned"
                     ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
-                    : "bg-red-500/10 text-red-400 border border-red-500/20")
+                    : gameResult.result === "draw_agreed" || gameResult.result === "draw" || gameResult.result === "stalemate"
+                      ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                      : "bg-red-500/10 text-red-400 border border-red-500/20")
                 : (isMyTurn ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-white/5 text-gray-400 border border-white/5")
                 }`}>
                 {gameResult ? (
                   gameResult.result === "abandoned" ? "⚠️ Opponent Left" :
                     gameResult.result === "timeout" ? (gameResult.winner === myColor ? "⏱ You Won by Timeout!" : "⏳ You Lost by Timeout") :
-                      gameResult.result === "checkmate" ? (gameResult.winner === myColor ? "🏆 You Won!" : "💀 You Lost") :
-                        "🤝 Draw"
+                      gameResult.result === "resignation" ? (gameResult.winner === myColor ? "🏆 Won by Resignation" : "🏳️ You Resigned") :
+                        gameResult.result === "checkmate" ? (gameResult.winner === myColor ? "🏆 You Won!" : "💀 You Lost") :
+                          "🤝 Draw"
                 ) : (
                   isMyTurn ? "♟ Your turn" : "⏳ Opponent's turn"
                 )}
@@ -249,18 +274,19 @@ export const Game = () => {
                   <div className="text-5xl mb-4 drop-shadow-lg">
                     {gameResult.result === "abandoned" ? "🏆" :
                       gameResult.result === "timeout" ? (gameResult.winner === myColor ? "🏆" : "⏳") :
-                        gameResult.result === "checkmate" ? (gameResult.winner === myColor ? "🏆" : "💀") :
-                          "🤝"}
+                        gameResult.result === "resignation" ? (gameResult.winner === myColor ? "🏆" : "🏳️") :
+                          gameResult.result === "checkmate" ? (gameResult.winner === myColor ? "🏆" : "💀") :
+                            "🤝"}
                   </div>
 
-                  {/* Title */}
                   <h2 className={`text-3xl font-black mb-2 tracking-tight ${gameResult.winner === myColor || gameResult.result === "abandoned" ? "text-emerald-400" :
-                    "text-white"
+                    gameResult.result === "draw" || gameResult.result === "draw_agreed" || gameResult.result === "stalemate" ? "text-blue-400" : "text-white"
                     }`}>
                     {gameResult.result === "abandoned" ? "You Won!" :
                       gameResult.result === "timeout" ? (gameResult.winner === myColor ? "You Won!" : "Time's Up!") :
-                        gameResult.result === "checkmate" ? (gameResult.winner === myColor ? "You Won!" : "Game Over") :
-                          "It's a Draw"}
+                        gameResult.result === "resignation" ? (gameResult.winner === myColor ? "You Won!" : "You Resigned") :
+                          gameResult.result === "checkmate" ? (gameResult.winner === myColor ? "You Won!" : "Game Over") :
+                            "It's a Draw"}
                   </h2>
 
                   {/* Subtitle */}
@@ -269,8 +295,11 @@ export const Game = () => {
                       gameResult.result === "checkmate" && gameResult.winner !== myColor ? "You were checkmated by the opponent." :
                         gameResult.result === "timeout" && gameResult.winner === myColor ? "Your opponent ran out of time." :
                           gameResult.result === "timeout" && gameResult.winner !== myColor ? "You ran out of time." :
-                            gameResult.result === "abandoned" ? "Your opponent abandoned the match." :
-                              "The game ended in a stalemate or agreed draw."}
+                            gameResult.result === "resignation" && gameResult.winner === myColor ? "Your opponent has resigned." :
+                              gameResult.result === "resignation" && gameResult.winner !== myColor ? "You conceded the match." :
+                                gameResult.result === "abandoned" ? "Your opponent abandoned the match." :
+                                  gameResult.result === "draw_agreed" ? "A draw was agreed upon by mutual consent." :
+                                    "The game ended in a stalemate or agreed draw."}
                   </p>
 
                   {/* Play Again Button */}
@@ -283,6 +312,38 @@ export const Game = () => {
                     Play Again
                   </button>
 
+                </div>
+              </div>
+            )}
+
+            {/* Draw Offer Modal */}
+            {drawOfferReceived && (
+              <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-40">
+                <div className="bg-[#1e2430] p-6 rounded-2xl border border-blue-500/30 shadow-2xl flex flex-col items-center text-center max-w-[80%]">
+                  <div className="text-3xl mb-3">🤝</div>
+                  <h3 className="text-xl font-bold text-white mb-2">Draw Offered</h3>
+                  <p className="text-sm text-gray-400 mb-6">Your opponent has offered a draw.</p>
+
+                  <div className="flex gap-3 w-full">
+                    <button
+                      onClick={() => {
+                        socket.send(JSON.stringify({ type: REJECT_DRAW }));
+                        setDrawOfferReceived(false);
+                      }}
+                      className="flex-1 py-2 px-4 rounded-xl font-bold bg-white/5 hover:bg-white/10 text-white transition-colors border border-white/10"
+                    >
+                      Decline
+                    </button>
+                    <button
+                      onClick={() => {
+                        socket.send(JSON.stringify({ type: ACCEPT_DRAW }));
+                        setDrawOfferReceived(false);
+                      }}
+                      className="flex-1 py-2 px-4 rounded-xl font-bold bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors border border-blue-500/30"
+                    >
+                      Accept
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -315,42 +376,77 @@ export const Game = () => {
               />
             </div>
           )}
+          {/* Toast Notification for Rejected Draw */}
+          {showDrawRejectedToast && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-2 rounded-full text-sm font-medium shadow-lg backdrop-blur-md z-50 animate-in slide-in-from-bottom flex items-center gap-2">
+              <span>✕</span> Your draw offer was declined.
+            </div>
+          )}
+
         </div>
 
-        {/* MOVE PANEL aligned top */}
-        <div className={`w-full lg:w-[320px] shrink-0 bg-[#16181C] border border-white/10 rounded-2xl p-0 overflow-hidden flex flex-col shadow-[0_20px_50px_rgba(0,0,0,0.5)] ${myColor ? "mt-[32px]" : "mt-0"}`} style={{ height: myColor ? "557px" : "512px" }}>
+        {/* MOVE PANEL & ACTION BUTTONS */}
+        <div className={`w-full lg:w-[320px] shrink-0 flex flex-col ${myColor ? "mt-[32px]" : "mt-0"}`} style={{ height: myColor ? "557px" : "512px" }}>
 
-          <div className="text-sm font-bold uppercase tracking-wide bg-white/5 border-b border-white/5 px-6 py-4 text-white/80 shrink-0 flex items-center justify-between">
-            <span>Move History</span>
-            <span className="text-[10px] bg-white/10 text-gray-400 px-2 py-0.5 rounded-full">{moveHistory.length} moves</span>
-          </div>
+          <div className="bg-[#16181C] border border-white/10 rounded-2xl p-0 overflow-hidden flex flex-col shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex-1">
+            <div className="text-sm font-bold uppercase tracking-wide bg-white/5 border-b border-white/5 px-6 py-4 text-white/80 shrink-0 flex items-center justify-between">
+              <span>Move History</span>
+              <span className="text-[10px] bg-white/10 text-gray-400 px-2 py-0.5 rounded-full">{moveHistory.length} moves</span>
+            </div>
 
-          <div className="flex-1 overflow-y-auto overflow-x-hidden p-0 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-            <div className="flex flex-col text-[13px] leading-relaxed">
-              {Array.from({ length: Math.ceil(moveHistory.length / 2) }).map((_, i) => {
-                const whiteMove = moveHistory[i * 2];
-                const blackMove = moveHistory[i * 2 + 1];
-                const isLatestWhite = i * 2 === moveHistory.length - 1;
-                const isLatestBlack = i * 2 + 1 === moveHistory.length - 1;
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-0 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+              <div className="flex flex-col text-[13px] leading-relaxed">
+                {Array.from({ length: Math.ceil(moveHistory.length / 2) }).map((_, i) => {
+                  const whiteMove = moveHistory[i * 2];
+                  const blackMove = moveHistory[i * 2 + 1];
+                  const isLatestWhite = i * 2 === moveHistory.length - 1;
+                  const isLatestBlack = i * 2 + 1 === moveHistory.length - 1;
 
-                return (
-                  <div key={i} className={`flex border-b border-white/5 ${i % 2 === 0 ? "bg-white/[0.01]" : "bg-transparent"} hover:bg-white/[0.04] transition-colors`}>
-                    <div className="w-12 py-2.5 text-center text-gray-500 font-mono border-r border-white/5 bg-black/10 select-none flex items-center justify-center text-xs">
-                      {i + 1}
+                  return (
+                    <div key={i} className={`flex border-b border-white/5 ${i % 2 === 0 ? "bg-white/[0.01]" : "bg-transparent"} hover:bg-white/[0.04] transition-colors`}>
+                      <div className="w-12 py-2.5 text-center text-gray-500 font-mono border-r border-white/5 bg-black/10 select-none flex items-center justify-center text-xs">
+                        {i + 1}
+                      </div>
+
+                      <div className={`flex-1 flex items-center py-2.5 px-4 font-mono ${isLatestWhite ? "bg-emerald-500/10 text-emerald-400 font-semibold" : "text-gray-300"}`}>
+                        {whiteMove ? `${whiteMove.from} → ${whiteMove.to}` : ""}
+                      </div>
+
+                      <div className={`flex-1 flex items-center py-2.5 px-4 font-mono border-l border-white/5 border-dashed ${isLatestBlack ? "bg-emerald-500/10 text-emerald-400 font-semibold shadow-inner" : "text-gray-300"}`}>
+                        {blackMove ? `${blackMove.from} → ${blackMove.to}` : ""}
+                      </div>
                     </div>
-
-                    <div className={`flex-1 flex items-center py-2.5 px-4 font-mono ${isLatestWhite ? "bg-emerald-500/10 text-emerald-400 font-semibold" : "text-gray-300"}`}>
-                      {whiteMove ? `${whiteMove.from} → ${whiteMove.to}` : ""}
-                    </div>
-
-                    <div className={`flex-1 flex items-center py-2.5 px-4 font-mono border-l border-white/5 border-dashed ${isLatestBlack ? "bg-emerald-500/10 text-emerald-400 font-semibold shadow-inner" : "text-gray-300"}`}>
-                      {blackMove ? `${blackMove.from} → ${blackMove.to}` : ""}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
+
+          {/* Action Buttons */}
+          {myColor && gameResult === null && (
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={() => {
+                  if (confirm("Are you sure you want to resign?")) {
+                    socket.send(JSON.stringify({ type: RESIGN }));
+                  }
+                }}
+                className="flex-1 bg-[#16181C] hover:bg-red-500/10 text-gray-400 hover:text-red-400 border border-white/10 hover:border-red-500/30 transition-all rounded-xl py-3 text-sm font-bold tracking-wider uppercase flex items-center justify-center gap-2"
+              >
+                <span>🏳️</span> Resign
+              </button>
+
+              <button
+                onClick={() => {
+                  socket.send(JSON.stringify({ type: OFFER_DRAW }));
+                  alert("Draw offer sent to opponent.");
+                }}
+                className="flex-1 bg-[#16181C] hover:bg-blue-500/10 text-gray-400 hover:text-blue-400 border border-white/10 hover:border-blue-500/30 transition-all rounded-xl py-3 text-sm font-bold tracking-wider uppercase flex items-center justify-center gap-2"
+              >
+                <span>🤝</span> Offer Draw
+              </button>
+            </div>
+          )}
 
         </div>
       </div>
