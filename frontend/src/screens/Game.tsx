@@ -181,8 +181,21 @@ export const Game = () => {
                 You are <span className="font-bold text-white capitalize">{myColor}</span>
               </div>
 
-              <div className={`text-xs px-3 py-1.5 rounded-md font-bold uppercase tracking-wider ${isMyTurn ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-white/5 text-gray-400 border border-white/5"}`}>
-                {isMyTurn ? "♟ Your turn" : "⏳ Opponent's turn"}
+              <div className={`text-xs px-3 py-1.5 rounded-md font-bold uppercase tracking-wider ${gameResult
+                ? (gameResult.winner === myColor
+                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                  : gameResult.result === "abandoned"
+                    ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
+                    : "bg-red-500/10 text-red-400 border border-red-500/20")
+                : (isMyTurn ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-white/5 text-gray-400 border border-white/5")
+                }`}>
+                {gameResult ? (
+                  gameResult.result === "abandoned" ? "⚠️ Opponent Left" :
+                    gameResult.result === "checkmate" ? (gameResult.winner === myColor ? "🏆 You Won!" : "💀 You Lost") :
+                      "🤝 Draw"
+                ) : (
+                  isMyTurn ? "♟ Your turn" : "⏳ Opponent's turn"
+                )}
               </div>
             </div>
           )}
@@ -215,7 +228,7 @@ export const Game = () => {
         </div>
 
         {/* MOVE PANEL aligned top */}
-        <div className="w-full lg:w-[320px] shrink-0 bg-[#16181C] border border-white/10 rounded-2xl p-0 overflow-hidden flex flex-col shadow-[0_20px_50px_rgba(0,0,0,0.5)]" style={{ height: myColor ? "583px" : "512px" }}>
+        <div className={`w-full lg:w-[320px] shrink-0 bg-[#16181C] border border-white/10 rounded-2xl p-0 overflow-hidden flex flex-col shadow-[0_20px_50px_rgba(0,0,0,0.5)] ${myColor ? "mt-[32px]" : "mt-0"}`} style={{ height: myColor ? "557px" : "512px" }}>
 
           <div className="text-sm font-bold uppercase tracking-wide bg-white/5 border-b border-white/5 px-6 py-4 text-white/80 shrink-0 flex items-center justify-between">
             <span>Move History</span>
