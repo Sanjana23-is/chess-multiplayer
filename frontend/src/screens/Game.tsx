@@ -3,6 +3,7 @@ import { useSocket } from "../hooks/useSocket";
 import { useEffect, useState } from "react";
 import { Chess } from "chess.js";
 import { ChessClock } from "../components/ChessClock";
+import { useLocation, useNavigate } from "react-router-dom";
 
 export const INIT_GAME = "init_game";
 export const MOVE = "move";
@@ -13,6 +14,13 @@ export const RESIGN = "resign";
 export const OFFER_DRAW = "offer_draw";
 export const ACCEPT_DRAW = "accept_draw";
 export const REJECT_DRAW = "reject_draw";
+
+export const FIND_MATCH = "find_match";
+export const CREATE_ROOM = "create_room";
+export const JOIN_ROOM = "join_room";
+export const ROOM_CREATED = "room_created";
+export const ROOM_JOINED = "room_joined";
+export const ROOM_NOT_FOUND = "room_not_found";
 
 type GameResult = {
   result: "checkmate" | "stalemate" | "draw" | "abandoned" | "timeout" | "resignation" | "draw_agreed";
@@ -30,12 +38,26 @@ type MoveHistoryItem = {
 
 export const Game = () => {
   const socket = useSocket();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  // Auto start game when socket connects
+  // Auto start/find game when socket connects based on routing state
   useEffect(() => {
     if (!socket) return;
-    socket.send(JSON.stringify({ type: INIT_GAME }));
-  }, [socket]);
+
+    const state = location.state as { mode?: string, time?: number, roomId?: string } | null;
+
+    if (state?.mode === "matchmaking") {
+      socket.send(JSON.stringify({ type: FIND_MATCH, payload: { time: state.time || 600000 } }));
+    } else if (state?.mode === "create_private") {
+      socket.send(JSON.stringify({ type: CREATE_ROOM, payload: { time: state.time || 600000 } }));
+    } else if (state?.mode === "join_private") {
+      socket.send(JSON.stringify({ type: JOIN_ROOM, payload: { code: state.roomId } }));
+    } else {
+      // Fallback to auto-matchmaking standard game if directly navigated
+      socket.send(JSON.stringify({ type: FIND_MATCH, payload: { time: 600000 } }));
+    }
+  }, [socket, location.state]);
 
   const [chess, setChess] = useState(new Chess());
   const [board, setBoard] = useState(chess.board());
@@ -44,6 +66,10 @@ export const Game = () => {
   const [moveHistory, setMoveHistory] = useState<MoveHistoryItem[]>([]);
   const [capturedWhite, setCapturedWhite] = useState<string[]>([]);
   const [capturedBlack, setCapturedBlack] = useState<string[]>([]);
+
+  // Room State
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [roomError, setRoomError] = useState<string | null>(null);
 
   // Draw State
   const [drawOfferReceived, setDrawOfferReceived] = useState(false);
@@ -75,6 +101,8 @@ export const Game = () => {
           setCapturedWhite([]);
           setCapturedBlack([]);
           setDrawOfferReceived(false);
+          setInviteCode(null);
+          setRoomError(null);
 
           if (message.payload?.color) {
             setMyColor(message.payload.color);
@@ -87,6 +115,17 @@ export const Game = () => {
             setBlackTime(message.payload.blackTime);
           }
 
+          break;
+        }
+
+        case ROOM_CREATED: {
+          setInviteCode(message.payload.code);
+          break;
+        }
+
+        case ROOM_NOT_FOUND: {
+          setRoomError("Room not found or already full.");
+          setTimeout(() => navigate("/"), 3000); // Send back to lobby
           break;
         }
 
@@ -193,20 +232,22 @@ export const Game = () => {
       (chess.turn() === "b" && myColor === "black"));
 
   return (
-    <div className="min-h-screen flex justify-center items-center bg-[#0a0a0a] font-sans selection:bg-emerald-500/30">
-      <div className="flex flex-col lg:flex-row gap-12 max-w-6xl w-full justify-center px-6 lg:items-start items-center">
+    <div className="min-h-screen flex justify-center items-center bg-[#0a0a0a] font-sans selection:bg-emerald-500/30 py-8">
+      <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 w-full justify-center px-6 items-start lg:items-center">
 
         {/* BOARD AREA */}
         <div className="flex flex-col w-full max-w-[512px] shrink-0">
 
           {/* Captured Black Pieces */}
-          <div className="flex gap-1 mb-2 h-6 items-center">
+          <div className="flex gap-1 mb-2 h-6 items-center overflow-hidden">
             {capturedBlack.map((piece, i) => (
-              <img
-                key={i}
-                src={`/pieces/b${piece.toUpperCase()}.webp`}
-                className="w-5 h-5 opacity-90"
-              />
+              <div key={i} className="w-5 h-full flex items-center justify-center">
+                <img
+                  src={`/pieces/b${piece.toUpperCase()}.webp`}
+                  className="w-full h-full object-contain opacity-90 drop-shadow-sm"
+                  alt={`Captured ${piece}`}
+                />
+              </div>
             ))}
             {materialDiff > 0 && (
               <span className="text-emerald-400 font-bold ml-2 text-xs bg-emerald-500/10 px-1.5 py-0.5 rounded">
@@ -265,6 +306,50 @@ export const Game = () => {
               chess={chess}
             />
 
+            {/* Matchmaking / Waiting Overlay */}
+            {!myColor && !gameResult && (
+              <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-40">
+                {roomError ? (
+                  <div className="text-center animate-in fade-in zoom-in duration-300">
+                    <div className="text-4xl mb-4">⚠️</div>
+                    <h3 className="text-xl font-bold text-red-400 mb-2">Error</h3>
+                    <p className="text-gray-400">{roomError}</p>
+                    <p className="text-sm text-gray-500 mt-4">Returning to lobby...</p>
+                  </div>
+                ) : inviteCode ? (
+                  <div className="text-center animate-in fade-in zoom-in duration-500">
+                    <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-emerald-500/10 flex items-center justify-center relative">
+                      <div className="absolute inset-0 rounded-full border border-emerald-500/30 animate-ping"></div>
+                      <div className="text-2xl">🔗</div>
+                    </div>
+                    <h3 className="text-xl font-bold text-white mb-2">Private Room Created</h3>
+                    <p className="text-gray-400 text-sm mb-6">Share this code with your friend</p>
+                    <div className="bg-black/50 border border-white/10 px-8 py-4 rounded-xl font-mono text-4xl text-emerald-400 font-bold tracking-[0.2em] shadow-inner mb-6 mx-auto inline-block">
+                      {inviteCode}
+                    </div>
+                    <div className="flex justify-center flex-col items-center">
+                      <div className="flex h-1.5 w-1.5 relative mb-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                      </div>
+                      <p className="text-xs text-gray-500 uppercase tracking-widest font-semibold">Waiting for them to join...</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center animate-in fade-in zoom-in duration-500">
+                    <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-blue-500/10 flex items-center justify-center relative">
+                      <div className="absolute inset-0 rounded-full border-t-2 border-blue-400 animate-spin"></div>
+                      <div className="text-2xl">🔍</div>
+                    </div>
+                    <h3 className="text-xl font-bold text-white mb-2">Finding Opponent</h3>
+                    <p className="text-gray-400 text-sm max-w-[250px] mx-auto leading-relaxed">
+                      Searching for a player seeking a match with the same time control...
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Game Over Modal Overlay */}
             {gameResult && (
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center z-50 animate-in fade-in duration-300">
@@ -305,11 +390,11 @@ export const Game = () => {
                   {/* Play Again Button */}
                   <button
                     onClick={() => {
-                      socket.send(JSON.stringify({ type: INIT_GAME }));
+                      navigate("/");
                     }}
                     className="group relative px-8 py-3 w-full font-bold text-white rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] transition-all transform hover:-translate-y-0.5 active:translate-y-0"
                   >
-                    Play Again
+                    Back to Lobby
                   </button>
 
                 </div>
@@ -351,13 +436,15 @@ export const Game = () => {
           </div>
 
           {/* Captured White Pieces */}
-          <div className="flex gap-1 mt-2 h-6 items-center">
+          <div className="flex gap-1 mt-2 h-6 items-center overflow-hidden">
             {capturedWhite.map((piece, i) => (
-              <img
-                key={i}
-                src={`/pieces/w${piece.toUpperCase()}.webp`}
-                className="w-5 h-5 opacity-90"
-              />
+              <div key={i} className="w-5 h-full flex items-center justify-center">
+                <img
+                  src={`/pieces/w${piece.toUpperCase()}.webp`}
+                  className="w-full h-full object-contain opacity-90 drop-shadow-sm"
+                  alt={`Captured ${piece}`}
+                />
+              </div>
             ))}
             {materialDiff < 0 && (
               <span className="text-emerald-400 font-bold ml-2 text-xs bg-emerald-500/10 px-1.5 py-0.5 rounded">
@@ -386,9 +473,9 @@ export const Game = () => {
         </div>
 
         {/* MOVE PANEL & ACTION BUTTONS */}
-        <div className={`w-full lg:w-[320px] shrink-0 flex flex-col ${myColor ? "mt-[32px]" : "mt-0"}`} style={{ height: myColor ? "557px" : "512px" }}>
+        <div className="w-full lg:w-[320px] shrink-0 flex flex-col h-[512px] lg:h-auto self-stretch justify-center">
 
-          <div className="bg-[#16181C] border border-white/10 rounded-2xl p-0 overflow-hidden flex flex-col shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex-1">
+          <div className="bg-[#16181C] border border-white/10 rounded-2xl p-0 overflow-hidden flex flex-col shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex-1 min-h-[400px]">
             <div className="text-sm font-bold uppercase tracking-wide bg-white/5 border-b border-white/5 px-6 py-4 text-white/80 shrink-0 flex items-center justify-between">
               <span>Move History</span>
               <span className="text-[10px] bg-white/10 text-gray-400 px-2 py-0.5 rounded-full">{moveHistory.length} moves</span>

@@ -9,6 +9,9 @@ export const Landing = () => {
   const [chess] = useState(new Chess());
   const board = chess.board();
 
+  const [activeTab, setActiveTab] = useState<"online" | "friend">("online");
+  const [joinCode, setJoinCode] = useState("");
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 flex flex-col font-sans selection:bg-emerald-500/30 overflow-hidden">
 
@@ -49,15 +52,75 @@ export const Landing = () => {
             blisteringly fast environment designed specifically for focus and performance.
           </p>
 
-          <Button
-            onClick={() => navigate("/game")}
-            className="px-10 py-4"
-          >
-            Start Playing Now
-            <svg className="w-5 h-5 ml-1 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-          </Button>
+          <div className="w-full max-w-md bg-[#16181C]/80 border border-white/10 rounded-2xl p-6 backdrop-blur-md shadow-2xl">
+            {/* TABS */}
+            <div className="flex gap-2 mb-6 p-1.5 bg-black/40 rounded-xl border border-white/5">
+              <button
+                onClick={() => setActiveTab("online")}
+                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab === "online" ? "bg-white/10 text-white shadow-sm" : "text-gray-400 hover:text-white hover:bg-white/5"}`}
+              >
+                Play Online
+              </button>
+              <button
+                onClick={() => setActiveTab("friend")}
+                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab === "friend" ? "bg-white/10 text-white shadow-sm" : "text-gray-400 hover:text-white hover:bg-white/5"}`}
+              >
+                Play a Friend
+              </button>
+            </div>
+
+            {/* TAB CONTENT */}
+            {activeTab === "online" ? (
+              <div className="flex flex-col gap-3">
+                <Button onClick={() => navigate("/game", { state: { mode: "matchmaking", time: 600000 } })} className="w-full py-4 text-left justify-start px-6 bg-[#202228] hover:bg-[#2A2C33] text-white">
+                  <span className="text-xl mr-3">🐢</span> 10 min Rapid
+                </Button>
+                <Button onClick={() => navigate("/game", { state: { mode: "matchmaking", time: 180000 } })} className="w-full py-4 text-left justify-start px-6 bg-[#202228] hover:bg-[#2A2C33] text-white">
+                  <span className="text-xl mr-3">⚡</span> 3 min Blitz
+                </Button>
+                <Button onClick={() => navigate("/game", { state: { mode: "matchmaking", time: 60000 } })} className="w-full py-4 text-left justify-start px-6 bg-[#202228] hover:bg-[#2A2C33] text-white">
+                  <span className="text-xl mr-3">🚀</span> 1 min Bullet
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-6">
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Create a Room</label>
+                  <Button onClick={() => navigate("/game", { state: { mode: "create_private", time: 600000 } })} className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white">
+                    Create Private Room
+                  </Button>
+                </div>
+
+                <div className="relative flex items-center py-2">
+                  <div className="flex-grow border-t border-white/10"></div>
+                  <span className="flex-shrink-0 mx-4 text-gray-500 text-xs font-medium uppercase">Or</span>
+                  <div className="flex-grow border-t border-white/10"></div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Join a Room</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Enter 4-letter code"
+                      value={joinCode}
+                      onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                      maxLength={4}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 font-mono focus:outline-none focus:border-emerald-500/50 transition-colors uppercase"
+                    />
+                    <Button
+                      onClick={() => {
+                        if (joinCode.length === 4) navigate("/game", { state: { mode: "join_private", roomId: joinCode } });
+                      }}
+                      className="px-6 py-3 disabled:opacity-50"
+                    >
+                      Join
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right Column (Preview Board) */}

@@ -7,3 +7,10 @@ export const RESIGN = "resign";
 export const OFFER_DRAW = "offer_draw";
 export const ACCEPT_DRAW = "accept_draw";
 export const REJECT_DRAW = "reject_draw";
+
+export const FIND_MATCH = "find_match";
+export const CREATE_ROOM = "create_room";
+export const JOIN_ROOM = "join_room";
+export const ROOM_CREATED = "room_created";
+export const ROOM_JOINED = "room_joined";
+export const ROOM_NOT_FOUND = "room_not_found";

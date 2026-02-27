@@ -11,12 +11,12 @@ function App() {
   return (
     <div className='h-screen bg-neutral-800'>
       <BrowserRouter>
-      <Routes>
-        <Route path="/" element = {<Landing/> } /> 
-        <Route path="/game" element = {<Game/> } /> 
-      </Routes>
-    </BrowserRouter> 
-   </div>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/game" element={<Game />} />
+        </Routes>
+      </BrowserRouter>
+    </div>
   )
 }
 

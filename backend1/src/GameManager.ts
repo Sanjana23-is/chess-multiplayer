@@ -1,16 +1,25 @@
 import { WebSocket } from "ws";
-import { INIT_GAME, MOVE, REJOIN_GAME, RESIGN, OFFER_DRAW, ACCEPT_DRAW, REJECT_DRAW } from "./messages";
+import { INIT_GAME, MOVE, REJOIN_GAME, RESIGN, OFFER_DRAW, ACCEPT_DRAW, REJECT_DRAW, FIND_MATCH, CREATE_ROOM, JOIN_ROOM, ROOM_CREATED, ROOM_NOT_FOUND, ROOM_JOINED } from "./messages";
 import { Game } from "./Game";
 import { prisma } from "./prisma";
 
+interface PrivateRoom {
+  creator: WebSocket;
+  time: number; // e.g. 600000 for 10 min
+}
+
 export class GameManager {
   private games: Map<string, Game>;
-  private pendingUser: WebSocket | null;
+  /** Queue map. Key = Time in MS e.g. "600000", Value = Array of waiting WebSockets */
+  private matchmakingQueues: Map<string, WebSocket[]>;
+  /** Private rooms map. Key = Room Code e.g. "AX7B", Value = PrivateRoom obj */
+  private privateRooms: Map<string, PrivateRoom>;
   private users: WebSocket[];
 
   constructor() {
     this.games = new Map();
-    this.pendingUser = null;
+    this.matchmakingQueues = new Map();
+    this.privateRooms = new Map();
     this.users = [];
   }
 
@@ -21,8 +30,19 @@ export class GameManager {
     socket.on("close", async () => {
       this.removeUser(socket);
 
-      if (this.pendingUser === socket) {
-        this.pendingUser = null;
+      // Remove from matchmaking queues
+      for (const [timeStr, queue] of this.matchmakingQueues.entries()) {
+        const idx = queue.indexOf(socket);
+        if (idx !== -1) {
+          queue.splice(idx, 1);
+        }
+      }
+
+      // Remove from private rooms
+      for (const [code, room] of this.privateRooms.entries()) {
+        if (room.creator === socket) {
+          this.privateRooms.delete(code);
+        }
       }
 
       // Find game by scanning values (small set, acceptable)
@@ -46,35 +66,90 @@ export class GameManager {
         const message = JSON.parse(data.toString());
 
         // ======================
-        // INIT GAME
+        // PUBLIC MATCHMAKING
         // ======================
-        if (message.type === INIT_GAME) {
+        if (message.type === FIND_MATCH) {
+          const timeMs = message.payload?.time || 600000;
+          const timeKey = timeMs.toString();
 
-          if (this.pendingUser && this.pendingUser !== socket) {
+          // Get or create queue for this time control
+          let queue = this.matchmakingQueues.get(timeKey);
+          if (!queue) {
+            queue = [];
+            this.matchmakingQueues.set(timeKey, queue);
+          }
+
+          // Don't double queue the same socket
+          if (!queue.includes(socket)) {
+            queue.push(socket);
+          }
+
+          // If we have 2 players, start game!
+          if (queue.length >= 2) {
+            const player1 = queue.shift()!;
+            const player2 = queue.shift()!;
 
             const dbGame = await prisma.game.create({
               data: {
                 status: "ACTIVE",
                 whitePlayer: "pending",
                 blackPlayer: "new",
+                whiteTime: timeMs,
+                blackTime: timeMs
               },
             });
 
-            const game = new Game(
-              this.pendingUser,
-              socket,
-              dbGame.id
-            );
-
+            const game = new Game(player1, player2, dbGame.id, undefined, timeMs, timeMs);
             this.games.set(dbGame.id, game);
-            this.pendingUser = null;
+          }
+          return;
+        }
+
+        // ======================
+        // PRIVATE ROOMS
+        // ======================
+        if (message.type === CREATE_ROOM) {
+          const timeMs = message.payload?.time || 600000;
+          // Generate 4 letter code
+          const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+          this.privateRooms.set(code, { creator: socket, time: timeMs });
+
+          socket.send(JSON.stringify({ type: ROOM_CREATED, payload: { code } }));
+          return;
+        }
+
+        if (message.type === JOIN_ROOM) {
+          const code = message.payload?.code?.toUpperCase();
+          const room = this.privateRooms.get(code);
+
+          if (!room || room.creator === socket) {
+            socket.send(JSON.stringify({ type: ROOM_NOT_FOUND }));
             return;
           }
 
-          if (!this.pendingUser) {
-            this.pendingUser = socket;
-            return;
-          }
+          const player1 = room.creator;
+          const player2 = socket;
+          const timeMs = room.time;
+
+          // Room consumed
+          this.privateRooms.delete(code);
+
+          player1.send(JSON.stringify({ type: ROOM_JOINED }));
+          player2.send(JSON.stringify({ type: ROOM_JOINED }));
+
+          const dbGame = await prisma.game.create({
+            data: {
+              status: "ACTIVE",
+              whitePlayer: "pending",
+              blackPlayer: "new",
+              whiteTime: timeMs,
+              blackTime: timeMs
+            },
+          });
+
+          const game = new Game(player1, player2, dbGame.id, undefined, timeMs, timeMs);
+          this.games.set(dbGame.id, game);
+          return;
         }
 
         // ======================
