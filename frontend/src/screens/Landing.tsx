@@ -1,5 +1,4 @@
 import { useNavigate } from "react-router-dom";
-import { Button } from "../components/Button";
 import { ChessBoard } from "../components/ChessBoard";
 import { useState } from "react";
 import { Chess } from "chess.js";
@@ -72,23 +71,23 @@ export const Landing = () => {
             {/* TAB CONTENT */}
             {activeTab === "online" ? (
               <div className="flex flex-col gap-3">
-                <Button onClick={() => navigate("/game", { state: { mode: "matchmaking", time: 600000 } })} className="w-full py-4 text-left justify-start px-6 bg-[#202228] hover:bg-[#2A2C33] text-white">
+                <button onClick={() => navigate("/game", { state: { mode: "matchmaking", time: 600000 } })} className="w-full py-4 flex items-center px-6 bg-[#202228] hover:bg-[#2A2C33] text-white rounded-xl font-bold transition-colors">
                   <span className="text-xl mr-3">🐢</span> 10 min Rapid
-                </Button>
-                <Button onClick={() => navigate("/game", { state: { mode: "matchmaking", time: 180000 } })} className="w-full py-4 text-left justify-start px-6 bg-[#202228] hover:bg-[#2A2C33] text-white">
+                </button>
+                <button onClick={() => navigate("/game", { state: { mode: "matchmaking", time: 180000 } })} className="w-full py-4 flex items-center px-6 bg-[#202228] hover:bg-[#2A2C33] text-white rounded-xl font-bold transition-colors">
                   <span className="text-xl mr-3">⚡</span> 3 min Blitz
-                </Button>
-                <Button onClick={() => navigate("/game", { state: { mode: "matchmaking", time: 60000 } })} className="w-full py-4 text-left justify-start px-6 bg-[#202228] hover:bg-[#2A2C33] text-white">
+                </button>
+                <button onClick={() => navigate("/game", { state: { mode: "matchmaking", time: 60000 } })} className="w-full py-4 flex items-center px-6 bg-[#202228] hover:bg-[#2A2C33] text-white rounded-xl font-bold transition-colors">
                   <span className="text-xl mr-3">🚀</span> 1 min Bullet
-                </Button>
+                </button>
               </div>
             ) : (
               <div className="flex flex-col gap-6">
                 <div>
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Create a Room</label>
-                  <Button onClick={() => navigate("/game", { state: { mode: "create_private", time: 600000 } })} className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white">
+                  <button onClick={() => navigate("/game", { state: { mode: "create_private", time: 600000 } })} className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold transition-colors shadow-lg shadow-emerald-900/20">
                     Create Private Room
-                  </Button>
+                  </button>
                 </div>
 
                 <div className="relative flex items-center py-2">
@@ -108,14 +107,15 @@ export const Landing = () => {
                       maxLength={4}
                       className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 font-mono focus:outline-none focus:border-emerald-500/50 transition-colors uppercase"
                     />
-                    <Button
+                    <button
                       onClick={() => {
                         if (joinCode.length === 4) navigate("/game", { state: { mode: "join_private", roomId: joinCode } });
                       }}
-                      className="px-6 py-3 disabled:opacity-50"
+                      className="px-6 py-3 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                      disabled={joinCode.length !== 4}
                     >
                       Join
-                    </Button>
+                    </button>
                   </div>
                 </div>
               </div>

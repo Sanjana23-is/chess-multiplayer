@@ -14,3 +14,5 @@ export const JOIN_ROOM = "join_room";
 export const ROOM_CREATED = "room_created";
 export const ROOM_JOINED = "room_joined";
 export const ROOM_NOT_FOUND = "room_not_found";
+
+export const CHAT_MESSAGE = "chat_message";

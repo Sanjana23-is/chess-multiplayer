@@ -1,5 +1,5 @@
 import { WebSocket } from "ws";
-import { INIT_GAME, MOVE, REJOIN_GAME, RESIGN, OFFER_DRAW, ACCEPT_DRAW, REJECT_DRAW, FIND_MATCH, CREATE_ROOM, JOIN_ROOM, ROOM_CREATED, ROOM_NOT_FOUND, ROOM_JOINED } from "./messages";
+import { INIT_GAME, MOVE, REJOIN_GAME, RESIGN, OFFER_DRAW, ACCEPT_DRAW, REJECT_DRAW, FIND_MATCH, CREATE_ROOM, JOIN_ROOM, ROOM_CREATED, ROOM_NOT_FOUND, ROOM_JOINED, CHAT_MESSAGE } from "./messages";
 import { Game } from "./Game";
 import { prisma } from "./prisma";
 
@@ -268,6 +268,18 @@ export class GameManager {
           for (const game of this.games.values()) {
             if (game.player1 === socket || game.player2 === socket) {
               game.rejectDraw(socket);
+              return;
+            }
+          }
+        }
+
+        // ======================
+        // CHAT MESSAGE
+        // ======================
+        if (message.type === CHAT_MESSAGE) {
+          for (const game of this.games.values()) {
+            if (game.player1 === socket || game.player2 === socket) {
+              game.sendChat(socket, message.payload.text);
               return;
             }
           }

@@ -9,6 +9,7 @@ import {
     OPPONENT_DISCONNECTED,
     REJECT_DRAW,
     RESIGN,
+    CHAT_MESSAGE
 } from "./messages";
 import { prisma } from "./prisma"; // @ts-ignore - force TS Server refresh
 
@@ -280,6 +281,19 @@ export class Game {
 
         this.safeSend(opponent, OPPONENT_DISCONNECTED, {
             message: "Opponent disconnected",
+        });
+    }
+
+    // ============================
+    // Chat Features
+    // ============================
+    sendChat(socket: WebSocket, text: string) {
+        const color = socket === this.player1 ? "white" : "black";
+
+        // Broadcast the message back to both players
+        this.broadcast(CHAT_MESSAGE, {
+            sender: color,
+            text
         });
     }
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Chess } from "chess.js";
 import { ChessClock } from "../components/ChessClock";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useAudio } from "../hooks/useAudio";
 
 export const INIT_GAME = "init_game";
 export const MOVE = "move";
@@ -21,6 +22,12 @@ export const JOIN_ROOM = "join_room";
 export const ROOM_CREATED = "room_created";
 export const ROOM_JOINED = "room_joined";
 export const ROOM_NOT_FOUND = "room_not_found";
+export const CHAT_MESSAGE = "chat_message";
+
+type ChatMessageItem = {
+  sender: "white" | "black";
+  text: string;
+};
 
 type GameResult = {
   result: "checkmate" | "stalemate" | "draw" | "abandoned" | "timeout" | "resignation" | "draw_agreed";
@@ -40,6 +47,8 @@ export const Game = () => {
   const socket = useSocket();
   const location = useLocation();
   const navigate = useNavigate();
+  const { playSound, toggleMute, isMuted } = useAudio();
+  const [mutedUi, setMutedUi] = useState(isMuted.current);
 
   // Auto start/find game when socket connects based on routing state
   useEffect(() => {
@@ -57,7 +66,7 @@ export const Game = () => {
       // Fallback to auto-matchmaking standard game if directly navigated
       socket.send(JSON.stringify({ type: FIND_MATCH, payload: { time: 600000 } }));
     }
-  }, [socket, location.state]);
+  }, [socket, location.state, navigate]);
 
   const [chess, setChess] = useState(new Chess());
   const [board, setBoard] = useState(chess.board());
@@ -78,6 +87,10 @@ export const Game = () => {
   // Clocks state
   const [whiteTime, setWhiteTime] = useState<number>(600000); // 10 minutes default
   const [blackTime, setBlackTime] = useState<number>(600000);
+
+  // Chat State
+  const [chatMessages, setChatMessages] = useState<ChatMessageItem[]>([]);
+  const [chatInput, setChatInput] = useState("");
 
   // ===============================
   // SOCKET MESSAGE HANDLER
@@ -103,9 +116,12 @@ export const Game = () => {
           setDrawOfferReceived(false);
           setInviteCode(null);
           setRoomError(null);
+          setChatMessages([]);
 
           if (message.payload?.color) {
             setMyColor(message.payload.color);
+            // Play start sound only when we are fully assigned to a game
+            playSound("game-start");
           }
 
           if (message.payload?.whiteTime !== undefined) {
@@ -156,6 +172,17 @@ export const Game = () => {
               } else {
                 setCapturedWhite(prev => [...prev, move.captured]);
               }
+              playSound("capture");
+            } else {
+              playSound("move");
+            }
+
+            // After applying move, see if the next state is check
+            if (payload.fen) {
+              const checkTest = new Chess(payload.fen);
+              if (checkTest.inCheck()) {
+                playSound("check");
+              }
             }
           }
 
@@ -168,6 +195,7 @@ export const Game = () => {
             winner: message.payload.winner ?? null,
           });
           setDrawOfferReceived(false);
+          playSound("game-end");
           break;
         }
 
@@ -177,6 +205,7 @@ export const Game = () => {
             winner: myColor,
           });
           setDrawOfferReceived(false);
+          playSound("game-end");
           break;
         }
 
@@ -190,12 +219,17 @@ export const Game = () => {
           setTimeout(() => setShowDrawRejectedToast(false), 3000);
           break;
         }
+
+        case CHAT_MESSAGE: {
+          setChatMessages(prev => [...prev, message.payload]);
+          break;
+        }
       }
     };
 
     socket.addEventListener("message", handleMessage);
     return () => socket.removeEventListener("message", handleMessage);
-  }, [socket, myColor]);
+  }, [socket, myColor, playSound, navigate]);
 
   if (!socket) return <div>Connecting...</div>;
 
@@ -232,8 +266,19 @@ export const Game = () => {
       (chess.turn() === "b" && myColor === "black"));
 
   return (
-    <div className="min-h-screen flex justify-center items-center bg-[#0a0a0a] font-sans selection:bg-emerald-500/30 py-8">
-      <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 w-full justify-center px-6 items-start lg:items-center">
+    <div className="min-h-screen flex justify-center items-center bg-[#0a0a0a] font-sans selection:bg-emerald-500/30 py-8 relative">
+      <button
+        onClick={() => {
+          const isNowMuted = toggleMute();
+          setMutedUi(isNowMuted);
+        }}
+        className="absolute top-6 left-6 p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-gray-400 hover:text-white transition-colors flex items-center gap-2 font-bold text-sm"
+      >
+        <span>{mutedUi ? "🔇" : "🔊"}</span>
+        {mutedUi ? "Muted" : "Sound On"}
+      </button>
+
+      <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 w-full justify-center px-6 items-start lg:items-center mt-12 lg:mt-0">
 
         {/* BOARD AREA */}
         <div className="flex flex-col w-full max-w-[512px] shrink-0">
@@ -475,7 +520,7 @@ export const Game = () => {
         {/* MOVE PANEL & ACTION BUTTONS */}
         <div className="w-full lg:w-[320px] shrink-0 flex flex-col h-[512px] lg:h-auto self-stretch justify-center">
 
-          <div className="bg-[#16181C] border border-white/10 rounded-2xl p-0 overflow-hidden flex flex-col shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex-1 min-h-[400px]">
+          <div className="bg-[#16181C] border border-white/10 rounded-2xl p-0 overflow-hidden flex flex-col shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex-1 min-h-[220px]">
             <div className="text-sm font-bold uppercase tracking-wide bg-white/5 border-b border-white/5 px-6 py-4 text-white/80 shrink-0 flex items-center justify-between">
               <span>Move History</span>
               <span className="text-[10px] bg-white/10 text-gray-400 px-2 py-0.5 rounded-full">{moveHistory.length} moves</span>
@@ -508,6 +553,57 @@ export const Game = () => {
               </div>
             </div>
           </div>
+
+          {/* CHAT PANEL */}
+          {myColor && gameResult === null && (
+            <div className="bg-[#16181C] border border-white/10 rounded-2xl flex flex-col shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex-1 min-h-[250px] mt-4 overflow-hidden">
+              <div className="text-sm font-bold uppercase tracking-wide bg-white/5 border-b border-white/5 px-6 py-3 text-white/80 shrink-0">
+                Live Chat
+              </div>
+
+              {/* Messages Area */}
+              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                {chatMessages.length === 0 ? (
+                  <div className="m-auto text-xs text-center text-gray-500 italic">Say hi to your opponent!</div>
+                ) : (
+                  chatMessages.map((msg, idx) => {
+                    const isMe = msg.sender === myColor;
+                    return (
+                      <div key={idx} className={`max-w-[85%] rounded-xl px-3 py-2 text-[13px] shadow-sm ${isMe ? 'bg-emerald-600 text-white self-end rounded-tr-sm' : 'bg-white/10 text-gray-200 self-start rounded-tl-sm'}`}>
+                        {msg.text}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Input Area */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!chatInput.trim()) return;
+                  socket.send(JSON.stringify({ type: CHAT_MESSAGE, payload: { text: chatInput.trim() } }));
+                  setChatInput("");
+                }}
+                className="p-3 bg-black/20 border-t border-white/5 flex gap-2"
+              >
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Type a message..."
+                  className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500/50 transition-colors"
+                />
+                <button
+                  type="submit"
+                  disabled={!chatInput.trim()}
+                  className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:hover:bg-emerald-600 text-white rounded-lg px-4 py-2 text-sm font-bold transition-colors shadow-lg shadow-emerald-900/20"
+                >
+                  Send
+                </button>
+              </form>
+            </div>
+          )}
 
           {/* Action Buttons */}
           {myColor && gameResult === null && (
