@@ -113,6 +113,8 @@ export class GameManager {
               payload: {
                 gameId,
                 fen: game.getFen(),
+                whiteTime: game.whiteTime,
+                blackTime: game.blackTime,
               },
             }));
 
@@ -139,7 +141,9 @@ export class GameManager {
             socket,
             socket,
             gameId,
-            fen
+            fen,
+            dbGame.whiteTime,
+            dbGame.blackTime
           );
 
           this.games.set(gameId, recoveredGame);

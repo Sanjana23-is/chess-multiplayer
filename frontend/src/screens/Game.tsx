@@ -2,6 +2,7 @@ import { ChessBoard } from "../components/ChessBoard";
 import { useSocket } from "../hooks/useSocket";
 import { useEffect, useState } from "react";
 import { Chess } from "chess.js";
+import { ChessClock } from "../components/ChessClock";
 
 export const INIT_GAME = "init_game";
 export const MOVE = "move";
@@ -10,7 +11,7 @@ export const REJOIN_GAME = "rejoin_game";
 export const OPPONENT_DISCONNECTED = "opponent_disconnected";
 
 type GameResult = {
-  result: "checkmate" | "stalemate" | "draw" | "abandoned";
+  result: "checkmate" | "stalemate" | "draw" | "abandoned" | "timeout";
   winner: "white" | "black" | null;
 } | null;
 
@@ -40,6 +41,10 @@ export const Game = () => {
   const [capturedWhite, setCapturedWhite] = useState<string[]>([]);
   const [capturedBlack, setCapturedBlack] = useState<string[]>([]);
 
+  // Clocks state
+  const [whiteTime, setWhiteTime] = useState<number>(600000); // 10 minutes default
+  const [blackTime, setBlackTime] = useState<number>(600000);
+
   // ===============================
   // SOCKET MESSAGE HANDLER
   // ===============================
@@ -66,6 +71,13 @@ export const Game = () => {
             setMyColor(message.payload.color);
           }
 
+          if (message.payload?.whiteTime !== undefined) {
+            setWhiteTime(message.payload.whiteTime);
+          }
+          if (message.payload?.blackTime !== undefined) {
+            setBlackTime(message.payload.blackTime);
+          }
+
           break;
         }
 
@@ -76,6 +88,13 @@ export const Game = () => {
             const newChess = new Chess(payload.fen);
             setChess(newChess);
             setBoard(newChess.board());
+          }
+
+          if (payload?.whiteTime !== undefined) {
+            setWhiteTime(payload.whiteTime);
+          }
+          if (payload?.blackTime !== undefined) {
+            setBlackTime(payload.blackTime);
           }
 
           if (payload?.move) {
@@ -174,6 +193,17 @@ export const Game = () => {
             )}
           </div>
 
+          {/* Opponent Clock (Top) */}
+          {myColor && (
+            <div className="flex justify-end mb-2 w-full">
+              <ChessClock
+                time={myColor === "white" ? blackTime : whiteTime}
+                isActive={!isMyTurn && gameResult === null && moveHistory.length > 0}
+                color={myColor === "white" ? "black" : "white"}
+              />
+            </div>
+          )}
+
           {/* TURN INFO HEADER directly attached to the board */}
           {myColor && (
             <div className="flex items-center justify-between bg-white/5 border border-white/10 border-b-0 rounded-t-xl px-4 py-3 backdrop-blur-md">
@@ -191,8 +221,9 @@ export const Game = () => {
                 }`}>
                 {gameResult ? (
                   gameResult.result === "abandoned" ? "⚠️ Opponent Left" :
-                    gameResult.result === "checkmate" ? (gameResult.winner === myColor ? "🏆 You Won!" : "💀 You Lost") :
-                      "🤝 Draw"
+                    gameResult.result === "timeout" ? (gameResult.winner === myColor ? "⏱ You Won by Timeout!" : "⏳ You Lost by Timeout") :
+                      gameResult.result === "checkmate" ? (gameResult.winner === myColor ? "🏆 You Won!" : "💀 You Lost") :
+                        "🤝 Draw"
                 ) : (
                   isMyTurn ? "♟ Your turn" : "⏳ Opponent's turn"
                 )}
@@ -200,7 +231,7 @@ export const Game = () => {
             </div>
           )}
 
-          <div className={`w-[512px] h-[512px] border border-white/10 bg-[#16181C] relative ${myColor ? "rounded-b-xl" : "rounded-xl"} overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)]`}>
+          <div className={`w-[512px] h-[512px] border border-white/10 bg-[#16181C] relative flex items-center justify-center ${myColor ? "rounded-b-xl" : "rounded-xl"} overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)]`}>
             <ChessBoard
               socket={socket}
               board={board}
@@ -208,6 +239,54 @@ export const Game = () => {
               isMyTurn={isMyTurn}
               chess={chess}
             />
+
+            {/* Game Over Modal Overlay */}
+            {gameResult && (
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center z-50 animate-in fade-in duration-300">
+                <div className="bg-[#16181C]/90 p-8 rounded-2xl border border-white/10 shadow-2xl flex flex-col items-center text-center max-w-[80%] backdrop-blur-md">
+
+                  {/* Icon */}
+                  <div className="text-5xl mb-4 drop-shadow-lg">
+                    {gameResult.result === "abandoned" ? "🏆" :
+                      gameResult.result === "timeout" ? (gameResult.winner === myColor ? "🏆" : "⏳") :
+                        gameResult.result === "checkmate" ? (gameResult.winner === myColor ? "🏆" : "💀") :
+                          "🤝"}
+                  </div>
+
+                  {/* Title */}
+                  <h2 className={`text-3xl font-black mb-2 tracking-tight ${gameResult.winner === myColor || gameResult.result === "abandoned" ? "text-emerald-400" :
+                    "text-white"
+                    }`}>
+                    {gameResult.result === "abandoned" ? "You Won!" :
+                      gameResult.result === "timeout" ? (gameResult.winner === myColor ? "You Won!" : "Time's Up!") :
+                        gameResult.result === "checkmate" ? (gameResult.winner === myColor ? "You Won!" : "Game Over") :
+                          "It's a Draw"}
+                  </h2>
+
+                  {/* Subtitle */}
+                  <p className="text-gray-400 text-sm mb-8">
+                    {gameResult.result === "checkmate" && gameResult.winner === myColor ? "Brilliant checkmate." :
+                      gameResult.result === "checkmate" && gameResult.winner !== myColor ? "You were checkmated by the opponent." :
+                        gameResult.result === "timeout" && gameResult.winner === myColor ? "Your opponent ran out of time." :
+                          gameResult.result === "timeout" && gameResult.winner !== myColor ? "You ran out of time." :
+                            gameResult.result === "abandoned" ? "Your opponent abandoned the match." :
+                              "The game ended in a stalemate or agreed draw."}
+                  </p>
+
+                  {/* Play Again Button */}
+                  <button
+                    onClick={() => {
+                      socket.send(JSON.stringify({ type: INIT_GAME }));
+                    }}
+                    className="group relative px-8 py-3 w-full font-bold text-white rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+                  >
+                    Play Again
+                  </button>
+
+                </div>
+              </div>
+            )}
+
           </div>
 
           {/* Captured White Pieces */}
@@ -225,6 +304,17 @@ export const Game = () => {
               </span>
             )}
           </div>
+
+          {/* Player Clock (Bottom) */}
+          {myColor && (
+            <div className="flex justify-end mt-2 w-full">
+              <ChessClock
+                time={myColor === "white" ? whiteTime : blackTime}
+                isActive={isMyTurn && gameResult === null && moveHistory.length > 0}
+                color={myColor}
+              />
+            </div>
+          )}
         </div>
 
         {/* MOVE PANEL aligned top */}

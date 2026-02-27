@@ -16,6 +16,8 @@ model Game {
   blackPlayer String?
   result      String?
   winner      String?
+  whiteTime   Int         @default(600000)
+  blackTime   Int         @default(600000)
   moves       Move[]
 }
 

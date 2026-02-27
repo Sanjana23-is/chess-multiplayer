@@ -15,11 +15,18 @@ export class Game {
 
     private board: Chess;
 
+    public whiteTime: number;
+    public blackTime: number;
+    private timer: NodeJS.Timeout | null = null;
+    private lastMoveTime: number | null = null;
+
     constructor(
         player1: WebSocket,
         player2: WebSocket,
         id: string,
-        fen?: string
+        fen?: string,
+        whiteTime: number = 600000,
+        blackTime: number = 600000
     ) {
         this.player1 = player1;
         this.player2 = player2;
@@ -27,21 +34,77 @@ export class Game {
 
         this.board = fen ? new Chess(fen) : new Chess();
 
+        this.whiteTime = whiteTime;
+        this.blackTime = blackTime;
+
         this.safeSend(this.player1, INIT_GAME, {
             color: "white",
             gameId: this.id,
             fen: this.board.fen(),
+            whiteTime: this.whiteTime,
+            blackTime: this.blackTime,
         });
 
         this.safeSend(this.player2, INIT_GAME, {
             color: "black",
             gameId: this.id,
             fen: this.board.fen(),
+            whiteTime: this.whiteTime,
+            blackTime: this.blackTime,
         });
     }
 
     public getFen(): string {
         return this.board.fen();
+    }
+
+    private startTimer() {
+        this.lastMoveTime = Date.now();
+        this.timer = setInterval(() => {
+            const now = Date.now();
+            const elapsed = now - (this.lastMoveTime ?? now);
+            this.lastMoveTime = now;
+
+            if (this.board.turn() === "w") {
+                this.whiteTime -= elapsed;
+                if (this.whiteTime <= 0) {
+                    this.whiteTime = 0;
+                    this.handleTimeout("black");
+                }
+            } else {
+                this.blackTime -= elapsed;
+                if (this.blackTime <= 0) {
+                    this.blackTime = 0;
+                    this.handleTimeout("white");
+                }
+            }
+        }, 1000); // Check every second
+    }
+
+    private async handleTimeout(winnerColor: "white" | "black") {
+        if (this.timer) clearInterval(this.timer);
+
+        try {
+            await prisma.game.update({
+                where: { id: this.id },
+                data: {
+                    status: "FINISHED",
+                    result: "timeout",
+                    winner: winnerColor,
+                    whiteTime: this.whiteTime,
+                    blackTime: this.blackTime,
+                },
+            });
+        } catch (err) {
+            console.error("Failed to update game timeout status:", err);
+        }
+
+        this.broadcast(GAME_OVER, {
+            result: "timeout",
+            winner: winnerColor,
+            fen: this.board.fen(),
+            board: this.board.board(),
+        });
     }
 
     async makeMove(
@@ -78,6 +141,30 @@ export class Game {
         const boardState = this.board.board();
 
         // ============================
+        // Update Internal Time
+        // ============================
+        if (this.lastMoveTime) {
+            const now = Date.now();
+            const elapsed = now - this.lastMoveTime;
+
+            // If it was white's turn, deduct from white's time
+            if (turn === "w") {
+                this.whiteTime -= elapsed;
+            } else {
+                this.blackTime -= elapsed;
+            }
+        }
+
+        // Start the continuous timeout timer ONLY after the very first move is made.
+        // Before the first move, no time expires.
+        if (!this.timer) {
+            this.startTimer();
+        }
+
+        // Reset lastMoveTime for the next player
+        this.lastMoveTime = Date.now();
+
+        // ============================
         // Persist Move (with promotion)
         // ============================
         try {
@@ -90,14 +177,25 @@ export class Game {
                     fen,
                 },
             });
+
+            // Also update the game with the latest times
+            await prisma.game.update({
+                where: { id: this.id },
+                data: {
+                    whiteTime: Math.max(0, this.whiteTime),
+                    blackTime: Math.max(0, this.blackTime),
+                }
+            });
         } catch (err) {
-            console.error("Failed to persist move:", err);
+            console.error("Failed to persist move/time:", err);
         }
 
         // ============================
         // Check Game Over
         // ============================
         if (this.board.isGameOver()) {
+            if (this.timer) clearInterval(this.timer);
+
             let gameResult: "checkmate" | "stalemate" | "draw";
             let winner: "white" | "black" | null = null;
 
@@ -147,12 +245,15 @@ export class Game {
             },
             fen,
             board: boardState,
+            whiteTime: this.whiteTime,
+            blackTime: this.blackTime,
         });
 
     } // ✅ CLOSE makeMove PROPERLY
 
 
     async handleDisconnect(disconnectedSocket: WebSocket) {
+        if (this.timer) clearInterval(this.timer);
         const opponent =
             disconnectedSocket === this.player1
                 ? this.player2
