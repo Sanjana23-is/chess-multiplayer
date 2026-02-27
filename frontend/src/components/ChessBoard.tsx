@@ -19,7 +19,7 @@ export const ChessBoard = ({
   socket: WebSocket;
   myColor: "white" | "black";
   isMyTurn: boolean;
-  chess: Chess;
+  chess?: Chess;
 }) => {
   const [from, setFrom] = useState<null | Square>(null);
   const [promotionMove, setPromotionMove] = useState<{
@@ -29,8 +29,21 @@ export const ChessBoard = ({
 
   const displayBoard = myColor === "black" ? [...board].reverse() : board;
 
-  const validMoves = from ? chess.moves({ square: from, verbose: true }) : [];
+  const validMoves = from && chess ? chess.moves({ square: from, verbose: true }) : [];
   const validTargetSquares = validMoves.map(m => m.to);
+
+  let inCheckSquare: Square | null = null;
+  if (chess && chess.isCheck()) {
+    const turnColor = chess.turn();
+    for (const row of board) {
+      for (const piece of row) {
+        if (piece && piece.type === "k" && piece.color === turnColor) {
+          inCheckSquare = piece.square;
+          break;
+        }
+      }
+    }
+  }
 
   const isPromotionSquare = (fromSquare: Square, toSquare: Square): boolean => {
     const piece =
@@ -109,6 +122,7 @@ export const ChessBoard = ({
                 const isSelected = from === squareRepresentation;
                 const isValidMove = validTargetSquares.includes(squareRepresentation);
                 const isCaptureMove = isValidMove && square;
+                const isInCheck = inCheckSquare === squareRepresentation;
 
                 // Visual row/col relative to screen (not internal chessboard state)
                 const screenRow = i;
@@ -158,6 +172,11 @@ export const ChessBoard = ({
                       ${cornerRadius}
                     `}
                   >
+                    {/* In Check Highlight */}
+                    {isInCheck && (
+                      <div className="absolute inset-0 bg-[radial-gradient(circle,rgba(255,0,0,0.8)_0%,rgba(180,0,0,0)_80%)] opacity-80 mix-blend-multiply pointer-events-none z-10" />
+                    )}
+
                     {/* Selected Square Highlight */}
                     {isSelected && (
                       <div className="absolute inset-0 bg-[#F5F682] opacity-40 mix-blend-multiply pointer-events-none" />
@@ -165,10 +184,10 @@ export const ChessBoard = ({
 
                     {/* Valid Move Guidance Indicators */}
                     {isValidMove && !isCaptureMove && (
-                      <div className="absolute w-[30%] h-[30%] bg-black/20 rounded-full pointer-events-none z-20" />
+                      <div className="absolute w-[30%] h-[30%] bg-black/30 rounded-full pointer-events-none z-20" />
                     )}
                     {isValidMove && isCaptureMove && (
-                      <div className="absolute w-[80%] h-[80%] border-[5px] border-black/20 rounded-full pointer-events-none z-20" />
+                      <div className="absolute w-[85%] h-[85%] border-[6px] border-black/30 rounded-full pointer-events-none z-20" />
                     )}
 
                     {/* Coordinate Labels */}
