@@ -1,12 +1,15 @@
 import { WebSocket } from "ws";
-import { INIT_GAME, MOVE, REJOIN_GAME, RESIGN, OFFER_DRAW, ACCEPT_DRAW, REJECT_DRAW, FIND_MATCH, CREATE_ROOM, JOIN_ROOM, ROOM_CREATED, ROOM_NOT_FOUND, ROOM_JOINED, CHAT_MESSAGE } from "./messages";
+import { INIT_GAME, MOVE, REJOIN_GAME, RESIGN, OFFER_DRAW, ACCEPT_DRAW, REJECT_DRAW, FIND_MATCH, CREATE_ROOM, JOIN_ROOM, ROOM_CREATED, ROOM_NOT_FOUND, ROOM_JOINED, CHAT_MESSAGE, AUTH } from "./messages";
 import { Game } from "./Game";
 import { prisma } from "./prisma";
+import jwt from "jsonwebtoken";
 
 interface PrivateRoom {
   creator: WebSocket;
   time: number; // e.g. 600000 for 10 min
 }
+
+const JWT_SECRET = process.env.JWT_SECRET || "super_secret_chess_key";
 
 export class GameManager {
   private games: Map<string, Game>;
@@ -15,12 +18,14 @@ export class GameManager {
   /** Private rooms map. Key = Room Code e.g. "AX7B", Value = PrivateRoom obj */
   private privateRooms: Map<string, PrivateRoom>;
   private users: WebSocket[];
+  private userTokens: Map<WebSocket, string>;
 
   constructor() {
     this.games = new Map();
     this.matchmakingQueues = new Map();
     this.privateRooms = new Map();
     this.users = [];
+    this.userTokens = new Map();
   }
 
   addUser(socket: WebSocket) {
@@ -29,6 +34,7 @@ export class GameManager {
 
     socket.on("close", async () => {
       this.removeUser(socket);
+      this.userTokens.delete(socket);
 
       // Remove from matchmaking queues
       for (const [timeStr, queue] of this.matchmakingQueues.entries()) {
@@ -66,6 +72,22 @@ export class GameManager {
         const message = JSON.parse(data.toString());
 
         // ======================
+        // AUTH
+        // ======================
+        if (message.type === AUTH) {
+          const token = message.payload?.token;
+          if (token) {
+            try {
+              const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
+              this.userTokens.set(socket, decoded.id);
+            } catch (error) {
+              console.error("Invalid token on WS connection");
+            }
+          }
+          return;
+        }
+
+        // ======================
         // PUBLIC MATCHMAKING
         // ======================
         if (message.type === FIND_MATCH) {
@@ -89,11 +111,14 @@ export class GameManager {
             const player1 = queue.shift()!;
             const player2 = queue.shift()!;
 
+            const p1Id = this.userTokens.get(player1) || null;
+            const p2Id = this.userTokens.get(player2) || null;
+
             const dbGame = await prisma.game.create({
               data: {
                 status: "ACTIVE",
-                whitePlayer: "pending",
-                blackPlayer: "new",
+                whitePlayerId: p1Id,
+                blackPlayerId: p2Id,
                 whiteTime: timeMs,
                 blackTime: timeMs
               },
@@ -137,11 +162,14 @@ export class GameManager {
           player1.send(JSON.stringify({ type: ROOM_JOINED }));
           player2.send(JSON.stringify({ type: ROOM_JOINED }));
 
+          const p1Id = this.userTokens.get(player1) || null;
+          const p2Id = this.userTokens.get(player2) || null;
+
           const dbGame = await prisma.game.create({
             data: {
               status: "ACTIVE",
-              whitePlayer: "pending",
-              blackPlayer: "new",
+              whitePlayerId: p1Id,
+              blackPlayerId: p2Id,
               whiteTime: timeMs,
               blackTime: timeMs
             },

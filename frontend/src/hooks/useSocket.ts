@@ -1,48 +1,72 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAuth } from "../context/AuthContext";
 
-const WS_URL = (typeof window !== 'undefined' && window.location.protocol === 'https:')
-  ? `wss://${window.location.host}`
-  : 'ws://localhost:8080';
+const WS_URL =
+  typeof window !== "undefined" && window.location.protocol === "https:"
+    ? `wss://${window.location.host}`
+    : "ws://localhost:8080";
 
 const RECONNECT_DELAY_MS = 2000;
 
 export const useSocket = () => {
-  const [socket, setSocket] = useState<WebSocket | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { token } = useAuth();
+
+  const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    let ws: WebSocket;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let isCleaning = false; // set to true when the component unmounts
+    let active = true;
 
     const connect = () => {
-      ws = new WebSocket(WS_URL);
+      if (!active) return;
 
-      ws.addEventListener('open', () => {
-        if (!isCleaning) setSocket(ws);
-      });
+      const ws = new WebSocket(WS_URL);
+      socketRef.current = ws;
 
-      ws.addEventListener('close', () => {
-        if (isCleaning) return; // don't reconnect on intentional cleanup
-        setSocket(null);
-        // Auto-reconnect after a short delay
-        reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
-      });
+      ws.onopen = () => {
+        if (!active) return;
 
-      ws.addEventListener('error', () => {
-        // Let the 'close' event handle reconnection
-      });
+        if (token) {
+          ws.send(JSON.stringify({ type: "auth", payload: { token } }));
+        }
+
+        setIsConnected(true);
+        console.log("WebSocket connected");
+      };
+
+      ws.onclose = () => {
+        if (!active) return;
+        console.log("WebSocket closed. Reconnecting...");
+        setIsConnected(false);
+        socketRef.current = null;
+
+        reconnectRef.current = setTimeout(() => {
+          connect();
+        }, RECONNECT_DELAY_MS);
+      };
+
+      ws.onerror = () => {
+        if (!active) return;
+        ws.close();
+      };
     };
 
     connect();
 
-    // Cleanup: close the socket and cancel any pending reconnect
     return () => {
-      isCleaning = true;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      ws?.close();
-      setSocket(null);
+      active = false;
+      if (reconnectRef.current) {
+        clearTimeout(reconnectRef.current);
+      }
+      if (socketRef.current) {
+        socketRef.current.close();
+      }
+      socketRef.current = null;
+      setIsConnected(false);
     };
   }, []);
 
-  return socket;
+  // Return stable reference
+  return isConnected ? socketRef.current : null;
 };

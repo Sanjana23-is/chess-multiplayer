@@ -1,12 +1,14 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { ChessBoard } from "../components/ChessBoard";
 import { useState } from "react";
 import { Chess } from "chess.js";
+import { useAuth } from "../context/AuthContext";
 
 export const Landing = () => {
   const navigate = useNavigate();
   const [chess] = useState(new Chess());
   const board = chess.board();
+  const { user, logout } = useAuth();
 
   const [activeTab, setActiveTab] = useState<"online" | "friend">("online");
   const [joinCode, setJoinCode] = useState("");
@@ -25,6 +27,22 @@ export const Landing = () => {
             <svg className="w-5 h-5 text-[#0a0a0a]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L9 7h6zM5 10l2-2 3 2v6H5zM14 10l3-2 2 2v6h-5zM5 18h14v3H5z" /></svg>
           </div>
           <span className="text-2xl font-bold font-outfit tracking-tight text-white">Project Chess</span>
+        </div>
+
+        <div className="flex items-center gap-4">
+          {user ? (
+            <>
+              <span className="text-emerald-400 font-medium">Welcome, {user.name}</span>
+              <button onClick={logout} className="text-sm px-4 py-2 border border-white/20 rounded-lg hover:bg-white/10 transition">
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <Link to="/login" className="text-sm px-4 py-2 font-medium hover:text-emerald-400 transition">Login</Link>
+              <Link to="/register" className="text-sm px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition font-medium">Register</Link>
+            </>
+          )}
         </div>
       </nav>
 

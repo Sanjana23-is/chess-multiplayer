@@ -7,18 +7,35 @@ datasource db {
   url      = "file:./dev.db"
 }
 
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  rating       Int      @default(1200)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  gamesAsWhite Game[] @relation("WhiteGames")
+  gamesAsBlack Game[] @relation("BlackGames")
+}
+
 model Game {
-  id          String      @id @default(uuid())
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  status      GameStatus
-  whitePlayer String?
-  blackPlayer String?
-  result      String?
-  winner      String?
-  whiteTime   Int         @default(600000)
-  blackTime   Int         @default(600000)
-  moves       Move[]
+  id            String      @id @default(uuid())
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  status        GameStatus
+  
+  whitePlayerId String?
+  blackPlayerId String?
+  whitePlayer   User?       @relation("WhiteGames", fields: [whitePlayerId], references: [id])
+  blackPlayer   User?       @relation("BlackGames", fields: [blackPlayerId], references: [id])
+
+  result        String?
+  winner        String?
+  whiteTime     Int         @default(600000)
+  blackTime     Int         @default(600000)
+  moves         Move[]
 }
 
 model Move {

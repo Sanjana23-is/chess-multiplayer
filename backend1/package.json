@@ -6,6 +6,10 @@
     "dev": "npm run build && npm run build:scripts && node dist/index.js"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.19.11",
     "@types/pg": "^8.16.0",
     "ts-node": "^10.9.2",
@@ -14,7 +18,11 @@
   "dependencies": {
     "@prisma/client": "^6.19.2",
     "@types/ws": "^8.18.1",
+    "bcrypt": "^6.0.0",
     "chess.js": "^1.4.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.18.0",
     "prisma": "^6.19.2",
     "ws": "^8.19.0"

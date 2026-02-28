@@ -16,3 +16,4 @@ export const ROOM_JOINED = "room_joined";
 export const ROOM_NOT_FOUND = "room_not_found";
 
 export const CHAT_MESSAGE = "chat_message";
+export const AUTH = "auth";
