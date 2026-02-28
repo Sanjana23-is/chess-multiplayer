@@ -5,6 +5,7 @@ import { Chess } from "chess.js";
 import { ChessClock } from "../components/ChessClock";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAudio } from "../hooks/useAudio";
+import { useAuth } from "../context/AuthContext";
 
 export const INIT_GAME = "init_game";
 export const MOVE = "move";
@@ -32,6 +33,7 @@ type ChatMessageItem = {
 type GameResult = {
   result: "checkmate" | "stalemate" | "draw" | "abandoned" | "timeout" | "resignation" | "draw_agreed";
   winner: "white" | "black" | null;
+  newRating?: number;
 } | null;
 
 type MoveHistoryItem = {
@@ -47,6 +49,7 @@ export const Game = () => {
   const socket = useSocket();
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, updateUser } = useAuth();
   const { playSound, toggleMute, isMuted } = useAudio();
   const [mutedUi, setMutedUi] = useState(isMuted.current);
 
@@ -190,9 +193,23 @@ export const Game = () => {
         }
 
         case GAME_OVER: {
+          let updatedRating: number | undefined;
+
+          if (message.payload.newRatings && user && myColor) {
+            const newRating = myColor === "white"
+              ? message.payload.newRatings.whiteElo
+              : message.payload.newRatings.blackElo;
+
+            if (newRating !== user.rating) {
+              updatedRating = newRating;
+              updateUser({ ...user, rating: newRating });
+            }
+          }
+
           setGameResult({
             result: message.payload.result,
             winner: message.payload.winner ?? null,
+            newRating: updatedRating
           });
           setDrawOfferReceived(false);
           playSound("game-end");
@@ -200,9 +217,23 @@ export const Game = () => {
         }
 
         case OPPONENT_DISCONNECTED: {
+          let updatedRating: number | undefined;
+
+          if (message.payload.newRatings && user && myColor) {
+            const newRating = myColor === "white"
+              ? message.payload.newRatings.whiteElo
+              : message.payload.newRatings.blackElo;
+
+            if (newRating !== user.rating) {
+              updatedRating = newRating;
+              updateUser({ ...user, rating: newRating });
+            }
+          }
+
           setGameResult({
             result: "abandoned",
             winner: myColor,
+            newRating: updatedRating
           });
           setDrawOfferReceived(false);
           playSound("game-end");
@@ -420,7 +451,7 @@ export const Game = () => {
                   </h2>
 
                   {/* Subtitle */}
-                  <p className="text-gray-400 text-sm mb-8">
+                  <p className="text-gray-400 text-sm mb-4">
                     {gameResult.result === "checkmate" && gameResult.winner === myColor ? "Brilliant checkmate." :
                       gameResult.result === "checkmate" && gameResult.winner !== myColor ? "You were checkmated by the opponent." :
                         gameResult.result === "timeout" && gameResult.winner === myColor ? "Your opponent ran out of time." :
@@ -431,6 +462,19 @@ export const Game = () => {
                                   gameResult.result === "draw_agreed" ? "A draw was agreed upon by mutual consent." :
                                     "The game ended in a stalemate or agreed draw."}
                   </p>
+
+                  {/* Rating Changes */}
+                  {gameResult.newRating !== undefined && user && (
+                    <div className="mb-8 flex items-center justify-center gap-3">
+                      <span className="text-gray-500 font-bold uppercase text-xs tracking-widest">New Rating</span>
+                      <span className="text-2xl font-black text-white">{gameResult.newRating}</span>
+                      <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${gameResult.newRating > user.rating ? "bg-emerald-500/20 text-emerald-400" : gameResult.newRating < user.rating ? "bg-red-500/20 text-red-400" : "bg-gray-500/20 text-gray-400"}`}>
+                        {gameResult.newRating > user.rating ? "+" : ""}{gameResult.newRating - user.rating}
+                      </span>
+                    </div>
+                  )}
+
+                  {!gameResult.newRating && <div className="mb-4"></div>}
 
                   {/* Play Again Button */}
                   <button

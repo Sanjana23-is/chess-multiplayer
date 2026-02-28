@@ -8,6 +8,7 @@ import { Game } from './screens/Game';
 import { AuthProvider } from './context/AuthContext';
 import { Login } from './screens/Login';
 import { Register } from './screens/Register';
+import { Profile } from './screens/Profile';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
             <Route path="/game" element={<Game />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/profile" element={<Profile />} />
           </Routes>
         </BrowserRouter>
       </div>

@@ -1,17 +1,8 @@
 import WebSocket from "ws";
 import { Chess } from "chess.js";
-import {
-    ACCEPT_DRAW,
-    GAME_OVER,
-    INIT_GAME,
-    MOVE,
-    OFFER_DRAW,
-    OPPONENT_DISCONNECTED,
-    REJECT_DRAW,
-    RESIGN,
-    CHAT_MESSAGE
-} from "./messages";
+import { ACCEPT_DRAW, GAME_OVER, INIT_GAME, MOVE, OFFER_DRAW, OPPONENT_DISCONNECTED, REJECT_DRAW, RESIGN, CHAT_MESSAGE } from "./messages";
 import { prisma } from "./prisma"; // @ts-ignore - force TS Server refresh
+import { calculateElo } from "./utils/elo";
 
 export class Game {
     public player1: WebSocket; // white
@@ -27,6 +18,10 @@ export class Game {
 
     // Draw offer tracking
     private drawOfferBy: "white" | "black" | null = null;
+    public isFinished: boolean = false;
+
+    public whitePlayerId: string | null;
+    public blackPlayerId: string | null;
 
     constructor(
         player1: WebSocket,
@@ -34,7 +29,9 @@ export class Game {
         id: string,
         fen?: string,
         whiteTime: number = 600000,
-        blackTime: number = 600000
+        blackTime: number = 600000,
+        whitePlayerId: string | null = null,
+        blackPlayerId: string | null = null
     ) {
         this.player1 = player1;
         this.player2 = player2;
@@ -44,6 +41,9 @@ export class Game {
 
         this.whiteTime = whiteTime;
         this.blackTime = blackTime;
+
+        this.whitePlayerId = whitePlayerId;
+        this.blackPlayerId = blackPlayerId;
 
         this.safeSend(this.player1, INIT_GAME, {
             color: "white",
@@ -64,6 +64,35 @@ export class Game {
 
     public getFen(): string {
         return this.board.fen();
+    }
+
+    private async updateElo(winnerColor: "white" | "black" | null): Promise<{ whiteElo: number, blackElo: number } | null> {
+        // Only update ratings if both players are authenticated users
+        if (!this.whitePlayerId || !this.blackPlayerId) return null;
+
+        try {
+            const whiteUser = await prisma.user.findUnique({ where: { id: this.whitePlayerId } });
+            const blackUser = await prisma.user.findUnique({ where: { id: this.blackPlayerId } });
+
+            if (!whiteUser || !blackUser) return null;
+
+            let resultForWhite: 1 | 0.5 | 0 = 0.5; // Draw default
+            if (winnerColor === "white") resultForWhite = 1;
+            else if (winnerColor === "black") resultForWhite = 0;
+
+            const [newWhiteElo, newBlackElo] = calculateElo(whiteUser.rating, blackUser.rating, resultForWhite);
+
+            await prisma.$transaction([
+                prisma.user.update({ where: { id: this.whitePlayerId }, data: { rating: newWhiteElo } }),
+                prisma.user.update({ where: { id: this.blackPlayerId }, data: { rating: newBlackElo } })
+            ]);
+
+            console.log(`[ELO] Game ${this.id}: White ${whiteUser.rating}->${newWhiteElo}, Black ${blackUser.rating}->${newBlackElo}`);
+            return { whiteElo: newWhiteElo, blackElo: newBlackElo };
+        } catch (err) {
+            console.error("Failed to update Elo ratings:", err);
+            return null;
+        }
     }
 
     private startTimer() {
@@ -90,8 +119,12 @@ export class Game {
     }
 
     private async handleTimeout(winnerColor: "white" | "black") {
+        if (this.isFinished) return;
+        this.isFinished = true;
+
         if (this.timer) clearInterval(this.timer);
 
+        let ratings = null;
         try {
             await prisma.game.update({
                 where: { id: this.id },
@@ -103,6 +136,7 @@ export class Game {
                     blackTime: this.blackTime,
                 },
             });
+            ratings = await this.updateElo(winnerColor);
         } catch (err) {
             console.error("Failed to update game timeout status:", err);
         }
@@ -112,6 +146,7 @@ export class Game {
             winner: winnerColor,
             fen: this.board.fen(),
             board: this.board.board(),
+            newRatings: ratings
         });
     }
 
@@ -202,6 +237,9 @@ export class Game {
         // Check Game Over
         // ============================
         if (this.board.isGameOver()) {
+            if (this.isFinished) return;
+            this.isFinished = true;
+
             if (this.timer) clearInterval(this.timer);
 
             let gameResult: "checkmate" | "stalemate" | "draw";
@@ -216,6 +254,7 @@ export class Game {
                 gameResult = "draw";
             }
 
+            let ratings = null;
             try {
                 await prisma.game.update({
                     where: { id: this.id },
@@ -225,6 +264,7 @@ export class Game {
                         winner,
                     },
                 });
+                ratings = await this.updateElo(winner);
             } catch (err) {
                 console.error("Failed to update game status:", err);
             }
@@ -234,6 +274,7 @@ export class Game {
                 winner,
                 fen,
                 board: boardState,
+                newRatings: ratings,
             });
 
             return;
@@ -261,6 +302,9 @@ export class Game {
 
 
     async handleDisconnect(disconnectedSocket: WebSocket) {
+        if (this.isFinished) return;
+        this.isFinished = true;
+
         if (this.timer) clearInterval(this.timer);
         const opponent =
             disconnectedSocket === this.player1
@@ -275,6 +319,10 @@ export class Game {
                     result: "abandoned",
                 },
             });
+
+            // Assume the disconnected socket loses
+            const winner = disconnectedSocket === this.player1 ? "black" : "white";
+            await this.updateElo(winner);
         } catch (err) {
             console.error("Failed to mark abandoned:", err);
         }
@@ -301,11 +349,15 @@ export class Game {
     // Resign & Draw Features
     // ============================
     async resign(socket: WebSocket) {
+        if (this.isFinished) return;
+        this.isFinished = true;
+
         if (this.timer) clearInterval(this.timer);
 
         const loserColor = socket === this.player1 ? "white" : "black";
         const winnerColor = loserColor === "white" ? "black" : "white";
 
+        let ratings = null;
         try {
             await prisma.game.update({
                 where: { id: this.id },
@@ -315,6 +367,7 @@ export class Game {
                     winner: winnerColor,
                 },
             });
+            ratings = await this.updateElo(winnerColor);
         } catch (err) {
             console.error("Failed to commit resignation:", err);
         }
@@ -324,6 +377,7 @@ export class Game {
             winner: winnerColor,
             fen: this.board.fen(),
             board: this.board.board(),
+            newRatings: ratings
         });
     }
 
@@ -343,8 +397,12 @@ export class Game {
             return;
         }
 
+        if (this.isFinished) return;
+        this.isFinished = true;
+
         if (this.timer) clearInterval(this.timer);
 
+        let ratings = null;
         try {
             await prisma.game.update({
                 where: { id: this.id },
@@ -354,6 +412,7 @@ export class Game {
                     winner: null,
                 },
             });
+            ratings = await this.updateElo(null); // Draw
         } catch (err) {
             console.error("Failed to commit agreed draw:", err);
         }
@@ -363,6 +422,7 @@ export class Game {
             winner: null,
             fen: this.board.fen(),
             board: this.board.board(),
+            newRatings: ratings
         });
     }
 

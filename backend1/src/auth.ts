@@ -109,3 +109,41 @@ authRouter.get('/me', async (req: Request, res: Response) => {
         res.status(401).json({ error: "Invalid token" });
     }
 });
+// Get current user games
+authRouter.get('/me/games', async (req: Request, res: Response) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            res.status(401).json({ error: "Unauthorized" });
+            return;
+        }
+
+        const token = authHeader.split(" ")[1];
+        const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
+
+        const games = await prisma.game.findMany({
+            where: {
+                OR: [
+                    { whitePlayerId: decoded.id },
+                    { blackPlayerId: decoded.id }
+                ]
+            },
+            include: {
+                whitePlayer: {
+                    select: { id: true, name: true, rating: true }
+                },
+                blackPlayer: {
+                    select: { id: true, name: true, rating: true }
+                }
+            },
+            orderBy: {
+                createdAt: 'desc'
+            }
+        });
+
+        res.json({ games });
+    } catch (error) {
+        console.error("Failed to fetch games:", error);
+        res.status(500).json({ error: "Failed to fetch games" });
+    }
+});

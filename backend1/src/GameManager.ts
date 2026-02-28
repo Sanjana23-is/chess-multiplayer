@@ -124,7 +124,7 @@ export class GameManager {
               },
             });
 
-            const game = new Game(player1, player2, dbGame.id, undefined, timeMs, timeMs);
+            const game = new Game(player1, player2, dbGame.id, undefined, timeMs, timeMs, p1Id, p2Id);
             this.games.set(dbGame.id, game);
           }
           return;
@@ -175,7 +175,7 @@ export class GameManager {
             },
           });
 
-          const game = new Game(player1, player2, dbGame.id, undefined, timeMs, timeMs);
+          const game = new Game(player1, player2, dbGame.id, undefined, timeMs, timeMs, p1Id, p2Id);
           this.games.set(dbGame.id, game);
           return;
         }
@@ -246,7 +246,9 @@ export class GameManager {
             gameId,
             fen,
             dbGame.whiteTime,
-            dbGame.blackTime
+            dbGame.blackTime,
+            dbGame.whitePlayerId,
+            dbGame.blackPlayerId
           );
 
           this.games.set(gameId, recoveredGame);

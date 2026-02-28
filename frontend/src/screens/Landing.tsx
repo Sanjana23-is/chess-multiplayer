@@ -32,7 +32,9 @@ export const Landing = () => {
         <div className="flex items-center gap-4">
           {user ? (
             <>
-              <span className="text-emerald-400 font-medium">Welcome, {user.name}</span>
+              <Link to="/profile" className="text-emerald-400 font-medium hover:text-emerald-300 transition" title="View Profile">
+                Welcome, {user.name}
+              </Link>
               <button onClick={logout} className="text-sm px-4 py-2 border border-white/20 rounded-lg hover:bg-white/10 transition">
                 Logout
               </button>
