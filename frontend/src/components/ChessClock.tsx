@@ -47,14 +47,14 @@ export const ChessClock = ({
     return (
         <div
             className={`
-        px-4 py-2 rounded-lg font-mono text-xl font-bold transition-all duration-300 flex items-center shadow-inner mt-2
-        ${isActive ? "bg-white/10 scale-105" : "bg-white/5 opacity-70"}
-        ${isLowTime && isActive ? "text-red-400 animate-pulse bg-red-500/10" : ""}
-        ${isZero ? "text-red-500 bg-red-500/20" : ""}
-        ${!isLowTime && !isZero ? (color === "white" ? "text-white" : "text-gray-300") : ""}
+        px-2 py-1 sm:px-4 sm:py-2 rounded-lg font-mono text-sm sm:text-xl font-bold transition-all duration-300 flex items-center shadow-sm dark:shadow-inner border backdrop-blur-md origin-right
+        ${isActive ? "bg-white/70 border-white/80 dark:bg-white/10 dark:border-transparent scale-105" : "bg-white/30 border-white/40 dark:bg-white/5 dark:border-transparent opacity-70"}
+        ${isLowTime && isActive ? "text-red-600 dark:text-red-400 animate-pulse bg-red-100/50 border-red-200/50 dark:bg-red-500/10 dark:border-transparent" : ""}
+        ${isZero ? "text-red-700 bg-red-200/50 border-red-300/50 dark:text-red-500 dark:bg-red-500/20 dark:border-transparent" : ""}
+        ${!isLowTime && !isZero ? (isActive ? "text-neutral-900 dark:text-white" : "text-neutral-500 dark:text-gray-300") : ""}
       `}
         >
-            <span className="mr-2 text-sm opacity-50 uppercase tracking-widest">{color}</span>
+            <span className={`mr-1 sm:mr-2 text-[10px] sm:text-sm uppercase tracking-widest font-black ${isActive ? "text-neutral-400 dark:text-gray-500 opacity-100" : "opacity-50"}`}>{color}</span>
             {formatTime(displayTime)}
         </div>
     );

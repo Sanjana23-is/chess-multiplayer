@@ -181,13 +181,33 @@ export class GameManager {
         }
 
         // ======================
-        // MOVE
+        // GAME ACTIONS (Move, Resign, Draw, Chat)
         // ======================
-        if (message.type === MOVE) {
-
+        if (
+          message.type === MOVE ||
+          message.type === RESIGN ||
+          message.type === OFFER_DRAW ||
+          message.type === ACCEPT_DRAW ||
+          message.type === REJECT_DRAW ||
+          message.type === CHAT_MESSAGE
+        ) {
           for (const game of this.games.values()) {
             if (game.player1 === socket || game.player2 === socket) {
-              await game.makeMove(socket, message.payload);
+
+              if (message.type === MOVE) {
+                await game.makeMove(socket, message.payload);
+              } else if (message.type === RESIGN) {
+                await game.resign(socket);
+              } else if (message.type === OFFER_DRAW) {
+                game.offerDraw(socket);
+              } else if (message.type === ACCEPT_DRAW) {
+                await game.acceptDraw(socket);
+              } else if (message.type === REJECT_DRAW) {
+                game.rejectDraw(socket);
+              } else if (message.type === CHAT_MESSAGE) {
+                game.sendChat(socket, message.payload.text);
+              }
+
               return;
             }
           }

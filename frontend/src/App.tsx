@@ -13,7 +13,7 @@ import { Profile } from './screens/Profile';
 function App() {
   return (
     <AuthProvider>
-      <div className='h-screen bg-neutral-800'>
+      <div className='min-h-screen'>
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Landing />} />

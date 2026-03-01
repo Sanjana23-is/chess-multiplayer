@@ -1,6 +1,6 @@
 import { ChessBoard } from "../components/ChessBoard";
 import { useSocket } from "../hooks/useSocket";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Chess } from "chess.js";
 import { ChessClock } from "../components/ChessClock";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -94,6 +94,13 @@ export const Game = () => {
   // Chat State
   const [chatMessages, setChatMessages] = useState<ChatMessageItem[]>([]);
   const [chatInput, setChatInput] = useState("");
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+
+  const isChatOpenRef = useRef(isChatOpen);
+  useEffect(() => {
+    isChatOpenRef.current = isChatOpen;
+  }, [isChatOpen]);
 
   // ===============================
   // SOCKET MESSAGE HANDLER
@@ -196,13 +203,12 @@ export const Game = () => {
           let updatedRating: number | undefined;
 
           if (message.payload.newRatings && user && myColor) {
-            const newRating = myColor === "white"
+            updatedRating = myColor === "white"
               ? message.payload.newRatings.whiteElo
               : message.payload.newRatings.blackElo;
 
-            if (newRating !== user.rating) {
-              updatedRating = newRating;
-              updateUser({ ...user, rating: newRating });
+            if (updatedRating !== undefined && updatedRating !== user.rating) {
+              updateUser({ ...user, rating: updatedRating });
             }
           }
 
@@ -220,13 +226,12 @@ export const Game = () => {
           let updatedRating: number | undefined;
 
           if (message.payload.newRatings && user && myColor) {
-            const newRating = myColor === "white"
+            updatedRating = myColor === "white"
               ? message.payload.newRatings.whiteElo
               : message.payload.newRatings.blackElo;
 
-            if (newRating !== user.rating) {
-              updatedRating = newRating;
-              updateUser({ ...user, rating: newRating });
+            if (updatedRating !== undefined && updatedRating !== user.rating) {
+              updateUser({ ...user, rating: updatedRating });
             }
           }
 
@@ -253,6 +258,9 @@ export const Game = () => {
 
         case CHAT_MESSAGE: {
           setChatMessages(prev => [...prev, message.payload]);
+          if (!isChatOpenRef.current) {
+            setUnreadChatCount(prev => prev + 1);
+          }
           break;
         }
       }
@@ -262,7 +270,7 @@ export const Game = () => {
     return () => socket.removeEventListener("message", handleMessage);
   }, [socket, myColor, playSound, navigate]);
 
-  if (!socket) return <div>Connecting...</div>;
+  if (!socket) return <div className="min-h-screen flex justify-center items-center bg-neutral-50 dark:bg-[#0a0a0a] text-neutral-900 dark:text-white transition-colors duration-300">Connecting...</div>;
 
   // ===============================
   // MATERIAL CALCULATION
@@ -297,44 +305,40 @@ export const Game = () => {
       (chess.turn() === "b" && myColor === "black"));
 
   return (
-    <div className="min-h-screen flex justify-center items-center bg-[#0a0a0a] font-sans selection:bg-emerald-500/30 py-8 relative">
-      <button
-        onClick={() => {
-          const isNowMuted = toggleMute();
-          setMutedUi(isNowMuted);
-        }}
-        className="absolute top-6 left-6 p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-gray-400 hover:text-white transition-colors flex items-center gap-2 font-bold text-sm"
-      >
-        <span>{mutedUi ? "🔇" : "🔊"}</span>
-        {mutedUi ? "Muted" : "Sound On"}
-      </button>
+    <div className="relative min-h-screen w-full flex justify-center items-start text-neutral-900 dark:text-zinc-100 font-sans selection:bg-emerald-500/30 transition-colors duration-300 overflow-x-hidden">
 
-      <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 w-full justify-center px-6 items-start lg:items-center mt-12 lg:mt-0">
+      {/* Abstract Background Blobs - Light Mode */}
+      <div className="dark:hidden absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] max-w-[800px] max-h-[800px] bg-blue-300/10 rounded-full blur-[120px] pointer-events-none z-0 mix-blend-multiply" />
+      <div className="dark:hidden absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] max-w-[900px] max-h-[900px] bg-rose-200/20 rounded-full blur-[150px] pointer-events-none z-0 mix-blend-multiply" />
 
-        {/* BOARD AREA */}
+      {/* Abstract Background Blobs - Dark Mode */}
+      <div className="hidden dark:block absolute top-[10%] left-[-5%] w-[40%] h-[50%] rounded-full bg-gradient-to-r from-cyan-900 to-blue-900 opacity-[0.1] blur-[100px] pointer-events-none z-0" />
+      <div className="hidden dark:block absolute bottom-[-10%] right-[-5%] w-[55%] h-[65%] rounded-full bg-gradient-to-l from-emerald-800 to-rose-900 opacity-[0.1] blur-[120px] pointer-events-none z-0" />
+
+      {/* Top Left Controls */}
+      <div className="absolute top-6 left-6 flex items-center gap-3 z-50">
+        <button
+          onClick={() => {
+            const isNowMuted = toggleMute();
+            setMutedUi(isNowMuted);
+          }}
+          className="p-3 bg-white hover:bg-neutral-50 dark:bg-white/5 dark:hover:bg-white/10 border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-600 dark:text-gray-400 hover:text-neutral-900 dark:hover:text-white transition-colors flex items-center gap-2 font-bold text-sm shadow-sm"
+        >
+          <span>{mutedUi ? "🔇" : "🔊"}</span>
+          <span className="hidden sm:inline">{mutedUi ? "Muted" : "Sound On"}</span>
+        </button>
+      </div>
+
+
+
+      <div className="relative z-10 flex flex-col lg:flex-row gap-6 lg:gap-12 w-full max-w-6xl justify-center px-4 sm:px-6 items-center lg:items-center py-4 sm:py-8">
+
+        {/* BOARD AREA (Center Column) */}
         <div className="flex flex-col w-full max-w-[512px] shrink-0">
 
-          {/* Captured Black Pieces */}
-          <div className="flex gap-1 mb-2 h-6 items-center overflow-hidden">
-            {capturedBlack.map((piece, i) => (
-              <div key={i} className="w-5 h-full flex items-center justify-center">
-                <img
-                  src={`/pieces/b${piece.toUpperCase()}.webp`}
-                  className="w-full h-full object-contain opacity-90 drop-shadow-sm"
-                  alt={`Captured ${piece}`}
-                />
-              </div>
-            ))}
-            {materialDiff > 0 && (
-              <span className="text-emerald-400 font-bold ml-2 text-xs bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                +{materialDiff}
-              </span>
-            )}
-          </div>
-
-          {/* Opponent Clock (Top) */}
+          {/* Opponent Clock (Mobile Fallback - Top) */}
           {myColor && (
-            <div className="flex justify-end mb-2 w-full">
+            <div className="flex lg:hidden justify-end mb-3 w-full">
               <ChessClock
                 time={myColor === "white" ? blackTime : whiteTime}
                 isActive={!isMyTurn && gameResult === null && moveHistory.length > 0}
@@ -343,22 +347,22 @@ export const Game = () => {
             </div>
           )}
 
-          {/* TURN INFO HEADER directly attached to the board */}
+          {/* TURN INFO HEADER separated from the board */}
           {myColor && (
-            <div className="flex items-center justify-between bg-white/5 border border-white/10 border-b-0 rounded-t-xl px-4 py-3 backdrop-blur-md">
-              <div className="text-sm font-medium text-gray-300">
-                You are <span className="font-bold text-white capitalize">{myColor}</span>
+            <div className="flex items-center justify-between bg-white/60 dark:bg-white/5 border border-white/50 dark:border-white/10 rounded-xl px-4 py-3 mb-3 backdrop-blur-xl dark:backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-none transition-all">
+              <div className="text-sm font-medium text-neutral-600 dark:text-gray-300">
+                You are <span className="font-bold text-neutral-900 dark:text-white capitalize">{myColor}</span>
               </div>
 
               <div className={`text-xs px-3 py-1.5 rounded-md font-bold uppercase tracking-wider ${gameResult
                 ? (gameResult.winner === myColor
-                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                  ? "bg-emerald-100 text-emerald-700 border border-emerald-300 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20"
                   : gameResult.result === "abandoned"
-                    ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
+                    ? "bg-orange-100 text-orange-700 border border-orange-300 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/20"
                     : gameResult.result === "draw_agreed" || gameResult.result === "draw" || gameResult.result === "stalemate"
-                      ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                      : "bg-red-500/10 text-red-400 border border-red-500/20")
-                : (isMyTurn ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-white/5 text-gray-400 border border-white/5")
+                      ? "bg-blue-100 text-blue-700 border border-blue-300 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20"
+                      : "bg-red-100 text-red-700 border border-red-300 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20")
+                : (isMyTurn ? "bg-emerald-100 text-emerald-700 border border-emerald-300 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20" : "bg-neutral-100 text-neutral-500 border border-neutral-200 dark:bg-white/5 dark:text-gray-400 dark:border-white/5")
                 }`}>
                 {gameResult ? (
                   gameResult.result === "abandoned" ? "⚠️ Opponent Left" :
@@ -373,159 +377,199 @@ export const Game = () => {
             </div>
           )}
 
-          <div className={`w-[512px] h-[512px] border border-white/10 bg-[#16181C] relative flex items-center justify-center ${myColor ? "rounded-b-xl" : "rounded-xl"} overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)]`}>
-            <ChessBoard
-              socket={socket}
-              board={board}
-              myColor={myColor ?? "white"}
-              isMyTurn={isMyTurn}
-              chess={chess}
-            />
-
-            {/* Matchmaking / Waiting Overlay */}
-            {!myColor && !gameResult && (
-              <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-40">
-                {roomError ? (
-                  <div className="text-center animate-in fade-in zoom-in duration-300">
-                    <div className="text-4xl mb-4">⚠️</div>
-                    <h3 className="text-xl font-bold text-red-400 mb-2">Error</h3>
-                    <p className="text-gray-400">{roomError}</p>
-                    <p className="text-sm text-gray-500 mt-4">Returning to lobby...</p>
-                  </div>
-                ) : inviteCode ? (
-                  <div className="text-center animate-in fade-in zoom-in duration-500">
-                    <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-emerald-500/10 flex items-center justify-center relative">
-                      <div className="absolute inset-0 rounded-full border border-emerald-500/30 animate-ping"></div>
-                      <div className="text-2xl">🔗</div>
-                    </div>
-                    <h3 className="text-xl font-bold text-white mb-2">Private Room Created</h3>
-                    <p className="text-gray-400 text-sm mb-6">Share this code with your friend</p>
-                    <div className="bg-black/50 border border-white/10 px-8 py-4 rounded-xl font-mono text-4xl text-emerald-400 font-bold tracking-[0.2em] shadow-inner mb-6 mx-auto inline-block">
-                      {inviteCode}
-                    </div>
-                    <div className="flex justify-center flex-col items-center">
-                      <div className="flex h-1.5 w-1.5 relative mb-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                      </div>
-                      <p className="text-xs text-gray-500 uppercase tracking-widest font-semibold">Waiting for them to join...</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center animate-in fade-in zoom-in duration-500">
-                    <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-blue-500/10 flex items-center justify-center relative">
-                      <div className="absolute inset-0 rounded-full border-t-2 border-blue-400 animate-spin"></div>
-                      <div className="text-2xl">🔍</div>
-                    </div>
-                    <h3 className="text-xl font-bold text-white mb-2">Finding Opponent</h3>
-                    <p className="text-gray-400 text-sm max-w-[250px] mx-auto leading-relaxed">
-                      Searching for a player seeking a match with the same time control...
-                    </p>
-                  </div>
-                )}
+          {/* Captured Black Pieces (Top of the board) */}
+          <div className="flex gap-1 mb-1.5 h-6 items-center overflow-hidden px-1">
+            {capturedBlack.map((piece, i) => (
+              <div key={i} className="w-5 h-full flex items-center justify-center">
+                <img
+                  src={`/pieces/b${piece.toUpperCase()}.webp`}
+                  className="w-full h-full object-contain opacity-90 drop-shadow-sm"
+                  alt={`Captured ${piece}`}
+                />
               </div>
+            ))}
+            {materialDiff > 0 && (
+              <span className="text-emerald-600 dark:text-emerald-400 font-bold ml-2 text-xs bg-emerald-100 dark:bg-emerald-500/10 border border-emerald-200 dark:border-transparent px-1.5 py-0.5 rounded shadow-sm">
+                +{materialDiff}
+              </span>
             )}
-
-            {/* Game Over Modal Overlay */}
-            {gameResult && (
-              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center z-50 animate-in fade-in duration-300">
-                <div className="bg-[#16181C]/90 p-8 rounded-2xl border border-white/10 shadow-2xl flex flex-col items-center text-center max-w-[80%] backdrop-blur-md">
-
-                  {/* Icon */}
-                  <div className="text-5xl mb-4 drop-shadow-lg">
-                    {gameResult.result === "abandoned" ? "🏆" :
-                      gameResult.result === "timeout" ? (gameResult.winner === myColor ? "🏆" : "⏳") :
-                        gameResult.result === "resignation" ? (gameResult.winner === myColor ? "🏆" : "🏳️") :
-                          gameResult.result === "checkmate" ? (gameResult.winner === myColor ? "🏆" : "💀") :
-                            "🤝"}
-                  </div>
-
-                  <h2 className={`text-3xl font-black mb-2 tracking-tight ${gameResult.winner === myColor || gameResult.result === "abandoned" ? "text-emerald-400" :
-                    gameResult.result === "draw" || gameResult.result === "draw_agreed" || gameResult.result === "stalemate" ? "text-blue-400" : "text-white"
-                    }`}>
-                    {gameResult.result === "abandoned" ? "You Won!" :
-                      gameResult.result === "timeout" ? (gameResult.winner === myColor ? "You Won!" : "Time's Up!") :
-                        gameResult.result === "resignation" ? (gameResult.winner === myColor ? "You Won!" : "You Resigned") :
-                          gameResult.result === "checkmate" ? (gameResult.winner === myColor ? "You Won!" : "Game Over") :
-                            "It's a Draw"}
-                  </h2>
-
-                  {/* Subtitle */}
-                  <p className="text-gray-400 text-sm mb-4">
-                    {gameResult.result === "checkmate" && gameResult.winner === myColor ? "Brilliant checkmate." :
-                      gameResult.result === "checkmate" && gameResult.winner !== myColor ? "You were checkmated by the opponent." :
-                        gameResult.result === "timeout" && gameResult.winner === myColor ? "Your opponent ran out of time." :
-                          gameResult.result === "timeout" && gameResult.winner !== myColor ? "You ran out of time." :
-                            gameResult.result === "resignation" && gameResult.winner === myColor ? "Your opponent has resigned." :
-                              gameResult.result === "resignation" && gameResult.winner !== myColor ? "You conceded the match." :
-                                gameResult.result === "abandoned" ? "Your opponent abandoned the match." :
-                                  gameResult.result === "draw_agreed" ? "A draw was agreed upon by mutual consent." :
-                                    "The game ended in a stalemate or agreed draw."}
-                  </p>
-
-                  {/* Rating Changes */}
-                  {gameResult.newRating !== undefined && user && (
-                    <div className="mb-8 flex items-center justify-center gap-3">
-                      <span className="text-gray-500 font-bold uppercase text-xs tracking-widest">New Rating</span>
-                      <span className="text-2xl font-black text-white">{gameResult.newRating}</span>
-                      <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${gameResult.newRating > user.rating ? "bg-emerald-500/20 text-emerald-400" : gameResult.newRating < user.rating ? "bg-red-500/20 text-red-400" : "bg-gray-500/20 text-gray-400"}`}>
-                        {gameResult.newRating > user.rating ? "+" : ""}{gameResult.newRating - user.rating}
-                      </span>
-                    </div>
-                  )}
-
-                  {!gameResult.newRating && <div className="mb-4"></div>}
-
-                  {/* Play Again Button */}
-                  <button
-                    onClick={() => {
-                      navigate("/");
-                    }}
-                    className="group relative px-8 py-3 w-full font-bold text-white rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] transition-all transform hover:-translate-y-0.5 active:translate-y-0"
-                  >
-                    Back to Lobby
-                  </button>
-
-                </div>
-              </div>
-            )}
-
-            {/* Draw Offer Modal */}
-            {drawOfferReceived && (
-              <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-40">
-                <div className="bg-[#1e2430] p-6 rounded-2xl border border-blue-500/30 shadow-2xl flex flex-col items-center text-center max-w-[80%]">
-                  <div className="text-3xl mb-3">🤝</div>
-                  <h3 className="text-xl font-bold text-white mb-2">Draw Offered</h3>
-                  <p className="text-sm text-gray-400 mb-6">Your opponent has offered a draw.</p>
-
-                  <div className="flex gap-3 w-full">
-                    <button
-                      onClick={() => {
-                        socket.send(JSON.stringify({ type: REJECT_DRAW }));
-                        setDrawOfferReceived(false);
-                      }}
-                      className="flex-1 py-2 px-4 rounded-xl font-bold bg-white/5 hover:bg-white/10 text-white transition-colors border border-white/10"
-                    >
-                      Decline
-                    </button>
-                    <button
-                      onClick={() => {
-                        socket.send(JSON.stringify({ type: ACCEPT_DRAW }));
-                        setDrawOfferReceived(false);
-                      }}
-                      className="flex-1 py-2 px-4 rounded-xl font-bold bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors border border-blue-500/30"
-                    >
-                      Accept
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
           </div>
 
-          {/* Captured White Pieces */}
-          <div className="flex gap-1 mt-2 h-6 items-center overflow-hidden">
+          <div className="relative z-10 mt-1 w-full max-w-[512px]">
+            {/* Desktop Timers (Floating Left) */}
+            {myColor && (
+              <div className="hidden lg:flex absolute right-[100%] top-0 bottom-0 pr-6 flex-col justify-between items-end pointer-events-none w-[180px]">
+                <div className="pointer-events-auto">
+                  <ChessClock
+                    time={myColor === "white" ? blackTime : whiteTime}
+                    isActive={!isMyTurn && gameResult === null && moveHistory.length > 0}
+                    color={myColor === "white" ? "black" : "white"}
+                  />
+                </div>
+                <div className="pointer-events-auto">
+                  <ChessClock
+                    time={myColor === "white" ? whiteTime : blackTime}
+                    isActive={isMyTurn && gameResult === null && moveHistory.length > 0}
+                    color={myColor}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className={`w-full aspect-square border border-white/60 dark:border-white/10 bg-white/60 dark:bg-black/20 backdrop-blur-md relative flex items-center justify-center rounded-xl overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.06)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all`}>
+              <ChessBoard
+                socket={socket}
+                board={board}
+                myColor={myColor ?? "white"}
+                isMyTurn={isMyTurn}
+                chess={chess}
+              />
+
+              {/* Matchmaking / Waiting Overlay */}
+              {!myColor && !gameResult && (
+                <div className="absolute inset-0 bg-white/90 dark:bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-40 transition-colors">
+                  {roomError ? (
+                    <div className="text-center animate-in fade-in zoom-in duration-300">
+                      <div className="text-4xl mb-4">⚠️</div>
+                      <h3 className="text-xl font-bold text-red-600 dark:text-red-400 mb-2">Error</h3>
+                      <p className="text-neutral-600 dark:text-gray-400">{roomError}</p>
+                      <p className="text-sm text-neutral-500 dark:text-gray-500 mt-4">Returning to lobby...</p>
+                    </div>
+                  ) : inviteCode ? (
+                    <div className="text-center animate-in fade-in zoom-in duration-500">
+                      <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center relative">
+                        <div className="absolute inset-0 rounded-full border border-emerald-300 dark:border-emerald-500/30 animate-ping"></div>
+                        <div className="text-2xl">🔗</div>
+                      </div>
+                      <h3 className="text-xl font-bold text-neutral-900 dark:text-white mb-2">Private Room Created</h3>
+                      <p className="text-neutral-600 dark:text-gray-400 text-sm mb-6">Share this code with your friend</p>
+                      <div className="bg-neutral-50 dark:bg-black/50 border border-neutral-200 dark:border-white/10 px-8 py-4 rounded-xl font-mono text-4xl text-emerald-600 dark:text-emerald-400 font-bold tracking-[0.2em] shadow-inner mb-6 mx-auto inline-block">
+                        {inviteCode}
+                      </div>
+                      <div className="flex justify-center flex-col items-center">
+                        <div className="flex h-1.5 w-1.5 relative mb-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 dark:bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500 dark:bg-emerald-500"></span>
+                        </div>
+                        <p className="text-xs text-neutral-500 dark:text-gray-500 uppercase tracking-widest font-semibold">Waiting for them to join...</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center animate-in fade-in zoom-in duration-500">
+                      <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-blue-100 dark:bg-blue-500/10 flex items-center justify-center relative">
+                        <div className="absolute inset-0 rounded-full border-t-2 border-blue-500 dark:border-blue-400 animate-spin"></div>
+                        <div className="text-2xl">🔍</div>
+                      </div>
+                      <h3 className="text-xl font-bold text-neutral-900 dark:text-white mb-2">Finding Opponent</h3>
+                      <p className="text-neutral-600 dark:text-gray-400 text-sm max-w-[250px] mx-auto leading-relaxed">
+                        Searching for a player seeking a match with the same time control...
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Game Over Modal Overlay */}
+              {gameResult && (
+                <div className="absolute inset-0 bg-white/40 dark:bg-black/60 backdrop-blur-md flex flex-col items-center justify-center z-50 animate-in fade-in duration-300 transition-colors">
+                  <div className="bg-white/70 dark:bg-black/40 p-8 rounded-2xl border border-white/50 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.08)] dark:shadow-2xl flex flex-col items-center text-center max-w-[80%] backdrop-blur-xl dark:backdrop-blur-md">
+
+                    {/* Icon */}
+                    <div className="text-5xl mb-4 drop-shadow-lg">
+                      {gameResult.result === "abandoned" ? "🏆" :
+                        gameResult.result === "timeout" ? (gameResult.winner === myColor ? "🏆" : "⏳") :
+                          gameResult.result === "resignation" ? (gameResult.winner === myColor ? "🏆" : "🏳️") :
+                            gameResult.result === "checkmate" ? (gameResult.winner === myColor ? "🏆" : "💀") :
+                              "🤝"}
+                    </div>
+
+                    <h2 className={`text-3xl font-black mb-2 tracking-tight ${gameResult.winner === myColor || gameResult.result === "abandoned" ? "text-emerald-600 dark:text-emerald-400" :
+                      gameResult.result === "draw" || gameResult.result === "draw_agreed" || gameResult.result === "stalemate" ? "text-blue-600 dark:text-blue-400" : "text-neutral-900 dark:text-white"
+                      }`}>
+                      {gameResult.result === "abandoned" ? "You Won!" :
+                        gameResult.result === "timeout" ? (gameResult.winner === myColor ? "You Won!" : "Time's Up!") :
+                          gameResult.result === "resignation" ? (gameResult.winner === myColor ? "You Won!" : "You Resigned") :
+                            gameResult.result === "checkmate" ? (gameResult.winner === myColor ? "You Won!" : "Game Over") :
+                              "It's a Draw"}
+                    </h2>
+
+                    {/* Subtitle */}
+                    <p className="text-neutral-500 dark:text-gray-400 text-sm mb-4">
+                      {gameResult.result === "checkmate" && gameResult.winner === myColor ? "Brilliant checkmate." :
+                        gameResult.result === "checkmate" && gameResult.winner !== myColor ? "You were checkmated by the opponent." :
+                          gameResult.result === "timeout" && gameResult.winner === myColor ? "Your opponent ran out of time." :
+                            gameResult.result === "timeout" && gameResult.winner !== myColor ? "You ran out of time." :
+                              gameResult.result === "resignation" && gameResult.winner === myColor ? "Your opponent has resigned." :
+                                gameResult.result === "resignation" && gameResult.winner !== myColor ? "You conceded the match." :
+                                  gameResult.result === "abandoned" ? "Your opponent abandoned the match." :
+                                    gameResult.result === "draw_agreed" ? "A draw was agreed upon by mutual consent." :
+                                      "The game ended in a stalemate or agreed draw."}
+                    </p>
+
+                    {/* Rating Changes */}
+                    {gameResult.newRating !== undefined && user && (
+                      <div className="mb-8 flex items-center justify-center gap-3">
+                        <span className="text-neutral-500 dark:text-gray-500 font-bold uppercase text-xs tracking-widest">New Rating</span>
+                        <span className="text-2xl font-black text-neutral-900 dark:text-white">{gameResult.newRating}</span>
+                        <span className={`text-sm font-bold px-2 py-0.5 rounded-full border shadow-sm ${gameResult.newRating > user.rating ? "bg-emerald-50 border-emerald-200 text-emerald-600 dark:bg-emerald-500/20 dark:border-transparent dark:text-emerald-400" : gameResult.newRating < user.rating ? "bg-red-50 border-red-200 text-red-600 dark:bg-red-500/20 dark:border-transparent dark:text-red-400" : "bg-neutral-100 border-neutral-200 text-neutral-600 dark:bg-gray-500/20 dark:border-transparent dark:text-gray-400"}`}>
+                          {gameResult.newRating > user.rating ? "+" : ""}{gameResult.newRating - user.rating}
+                        </span>
+                      </div>
+                    )}
+
+                    {!gameResult.newRating && <div className="mb-4"></div>}
+
+                    {/* Play Again Button */}
+                    <button
+                      onClick={() => {
+                        navigate("/");
+                      }}
+                      className="group relative px-8 py-3 w-full font-bold text-white rounded-xl bg-emerald-600 hover:bg-emerald-500 dark:bg-gradient-to-br dark:from-emerald-500 dark:to-emerald-600 dark:hover:from-emerald-400 dark:hover:to-emerald-500 shadow-lg shadow-emerald-600/20 dark:shadow-[0_0_20px_rgba(16,185,129,0.3)] dark:hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+                    >
+                      Back to Lobby
+                    </button>
+
+                  </div>
+                </div>
+              )}
+
+              {/* Draw Offer Modal */}
+              {drawOfferReceived && (
+                <div className="absolute inset-0 bg-white/40 dark:bg-black/40 backdrop-blur-md flex items-center justify-center z-40 transition-colors">
+                  <div className="bg-white/70 dark:bg-[#1e2430] p-6 rounded-2xl border border-white/50 dark:border-blue-500/30 shadow-xl dark:shadow-2xl flex flex-col items-center text-center max-w-[80%] backdrop-blur-xl">
+                    <div className="text-3xl mb-3">🤝</div>
+                    <h3 className="text-xl font-bold text-neutral-900 dark:text-white mb-2">Draw Offered</h3>
+                    <p className="text-sm text-neutral-500 dark:text-gray-400 mb-6">Your opponent has offered a draw.</p>
+
+                    <div className="flex gap-3 w-full">
+                      <button
+                        onClick={() => {
+                          socket.send(JSON.stringify({ type: REJECT_DRAW }));
+                          setDrawOfferReceived(false);
+                        }}
+                        className="flex-1 py-2 px-4 rounded-xl font-bold bg-white/50 hover:bg-white/80 text-neutral-700 dark:bg-white/5 dark:hover:bg-white/10 dark:text-white transition-colors border border-white/60 dark:border-white/10 shadow-sm"
+                      >
+                        Decline
+                      </button>
+                      <button
+                        onClick={() => {
+                          socket.send(JSON.stringify({ type: ACCEPT_DRAW }));
+                          setDrawOfferReceived(false);
+                        }}
+                        className="flex-1 py-2 px-4 rounded-xl font-bold bg-blue-50/70 hover:bg-blue-100/80 text-blue-700 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 dark:text-blue-400 transition-colors border border-blue-200/50 dark:border-blue-500/30 shadow-sm"
+                      >
+                        Accept
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+
+          {/* Captured White Pieces (Bottom of the board) */}
+          <div className="flex gap-1 mt-2.5 h-6 items-center overflow-hidden px-1">
             {capturedWhite.map((piece, i) => (
               <div key={i} className="w-5 h-full flex items-center justify-center">
                 <img
@@ -536,15 +580,16 @@ export const Game = () => {
               </div>
             ))}
             {materialDiff < 0 && (
-              <span className="text-emerald-400 font-bold ml-2 text-xs bg-emerald-500/10 px-1.5 py-0.5 rounded">
+              <span className="text-emerald-600 dark:text-emerald-400 font-bold ml-2 text-xs bg-emerald-100 dark:bg-emerald-500/10 border border-emerald-200 dark:border-transparent px-1.5 py-0.5 rounded shadow-sm">
                 +{Math.abs(materialDiff)}
               </span>
             )}
           </div>
 
-          {/* Player Clock (Bottom) */}
+
+          {/* Player Clock (Mobile Fallback - Bottom) */}
           {myColor && (
-            <div className="flex justify-end mt-2 w-full">
+            <div className="flex lg:hidden justify-end mt-2 w-full">
               <ChessClock
                 time={myColor === "white" ? whiteTime : blackTime}
                 isActive={isMyTurn && gameResult === null && moveHistory.length > 0}
@@ -552,9 +597,10 @@ export const Game = () => {
               />
             </div>
           )}
+
           {/* Toast Notification for Rejected Draw */}
           {showDrawRejectedToast && (
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-2 rounded-full text-sm font-medium shadow-lg backdrop-blur-md z-50 animate-in slide-in-from-bottom flex items-center gap-2">
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-red-100 dark:bg-red-500/10 border border-red-300 dark:border-red-500/20 text-red-600 dark:text-red-400 px-4 py-2 rounded-full text-sm font-bold shadow-lg backdrop-blur-md z-50 animate-in slide-in-from-bottom flex items-center gap-2">
               <span>✕</span> Your draw offer was declined.
             </div>
           )}
@@ -562,15 +608,15 @@ export const Game = () => {
         </div>
 
         {/* MOVE PANEL & ACTION BUTTONS */}
-        <div className="w-full lg:w-[320px] shrink-0 flex flex-col h-[512px] lg:h-auto self-stretch justify-center">
+        <div className="w-full lg:w-[320px] shrink-0 flex flex-col h-auto min-h-[300px] lg:min-h-[512px] self-stretch justify-between py-2">
 
-          <div className="bg-[#16181C] border border-white/10 rounded-2xl p-0 overflow-hidden flex flex-col shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex-1 min-h-[220px]">
-            <div className="text-sm font-bold uppercase tracking-wide bg-white/5 border-b border-white/5 px-6 py-4 text-white/80 shrink-0 flex items-center justify-between">
+          <div className="bg-white/5 dark:bg-black/20 border border-white/10 dark:border-white/5 rounded-3xl p-0 overflow-hidden flex flex-col backdrop-blur-3xl shadow-[0_16px_40px_rgba(0,0,0,0.4)] flex-1 min-h-[150px] transition-all">
+            <div className="text-sm font-bold uppercase tracking-wide bg-white/5 dark:bg-white/[0.02] border-b border-white/10 dark:border-white/5 px-4 py-3 text-neutral-300 dark:text-gray-300 shrink-0 flex items-center justify-between transition-colors shadow-[0_4px_12px_rgba(0,0,0,0.1)]">
               <span>Move History</span>
-              <span className="text-[10px] bg-white/10 text-gray-400 px-2 py-0.5 rounded-full">{moveHistory.length} moves</span>
+              <span className="text-[10px] bg-neutral-200 dark:bg-white/10 text-neutral-600 dark:text-gray-400 px-2 py-0.5 rounded-full font-bold">{moveHistory.length} moves</span>
             </div>
 
-            <div className="flex-1 overflow-y-auto overflow-x-hidden p-0 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-0 scrollbar-thin scrollbar-thumb-neutral-300 dark:scrollbar-thumb-white/10 scrollbar-track-transparent">
               <div className="flex flex-col text-[13px] leading-relaxed">
                 {Array.from({ length: Math.ceil(moveHistory.length / 2) }).map((_, i) => {
                   const whiteMove = moveHistory[i * 2];
@@ -579,16 +625,16 @@ export const Game = () => {
                   const isLatestBlack = i * 2 + 1 === moveHistory.length - 1;
 
                   return (
-                    <div key={i} className={`flex border-b border-white/5 ${i % 2 === 0 ? "bg-white/[0.01]" : "bg-transparent"} hover:bg-white/[0.04] transition-colors`}>
-                      <div className="w-12 py-2.5 text-center text-gray-500 font-mono border-r border-white/5 bg-black/10 select-none flex items-center justify-center text-xs">
+                    <div key={i} className={`flex border-b border-white/10 dark:border-white/5 ${i % 2 === 0 ? "bg-white/5 dark:bg-white/[0.02]" : "bg-transparent"} hover:bg-white/10 dark:hover:bg-white/[0.06] transition-colors`}>
+                      <div className="w-10 py-1.5 text-center text-neutral-500 font-mono border-r border-white/10 dark:border-white/5 bg-white/5 dark:bg-black/20 select-none flex items-center justify-center text-xs font-bold shadow-inner">
                         {i + 1}
                       </div>
 
-                      <div className={`flex-1 flex items-center py-2.5 px-4 font-mono ${isLatestWhite ? "bg-emerald-500/10 text-emerald-400 font-semibold" : "text-gray-300"}`}>
+                      <div className={`flex-1 flex items-center py-1.5 px-3 font-mono font-medium ${isLatestWhite ? "bg-emerald-500/20 text-emerald-400 font-bold shadow-inner" : "text-neutral-300 dark:text-gray-300"}`}>
                         {whiteMove ? `${whiteMove.from} → ${whiteMove.to}` : ""}
                       </div>
 
-                      <div className={`flex-1 flex items-center py-2.5 px-4 font-mono border-l border-white/5 border-dashed ${isLatestBlack ? "bg-emerald-500/10 text-emerald-400 font-semibold shadow-inner" : "text-gray-300"}`}>
+                      <div className={`flex-1 flex items-center py-1.5 px-3 font-mono font-medium border-l border-white/10 dark:border-white/5 border-dashed ${isLatestBlack ? "bg-emerald-500/20 text-emerald-400 font-bold shadow-inner" : "text-neutral-300 dark:text-gray-300"}`}>
                         {blackMove ? `${blackMove.from} → ${blackMove.to}` : ""}
                       </div>
                     </div>
@@ -598,80 +644,100 @@ export const Game = () => {
             </div>
           </div>
 
-          {/* CHAT PANEL */}
+          {/* Action Buttons & Chat Toggle */}
           {myColor && gameResult === null && (
-            <div className="bg-[#16181C] border border-white/10 rounded-2xl flex flex-col shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex-1 min-h-[250px] mt-4 overflow-hidden">
-              <div className="text-sm font-bold uppercase tracking-wide bg-white/5 border-b border-white/5 px-6 py-3 text-white/80 shrink-0">
-                Live Chat
-              </div>
-
-              {/* Messages Area */}
-              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                {chatMessages.length === 0 ? (
-                  <div className="m-auto text-xs text-center text-gray-500 italic">Say hi to your opponent!</div>
-                ) : (
-                  chatMessages.map((msg, idx) => {
-                    const isMe = msg.sender === myColor;
-                    return (
-                      <div key={idx} className={`max-w-[85%] rounded-xl px-3 py-2 text-[13px] shadow-sm ${isMe ? 'bg-emerald-600 text-white self-end rounded-tr-sm' : 'bg-white/10 text-gray-200 self-start rounded-tl-sm'}`}>
-                        {msg.text}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* Input Area */}
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!chatInput.trim()) return;
-                  socket.send(JSON.stringify({ type: CHAT_MESSAGE, payload: { text: chatInput.trim() } }));
-                  setChatInput("");
-                }}
-                className="p-3 bg-black/20 border-t border-white/5 flex gap-2"
-              >
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Type a message..."
-                  className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500/50 transition-colors"
-                />
+            <div className="flex flex-col gap-3 mt-4">
+              {!isChatOpen && (
                 <button
-                  type="submit"
-                  disabled={!chatInput.trim()}
-                  className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:hover:bg-emerald-600 text-white rounded-lg px-4 py-2 text-sm font-bold transition-colors shadow-lg shadow-emerald-900/20"
+                  onClick={() => {
+                    setIsChatOpen(true);
+                    setUnreadChatCount(0);
+                  }}
+                  className="w-full bg-white/50 hover:bg-white/80 dark:bg-black/20 dark:hover:bg-white/5 text-neutral-600 hover:text-neutral-900 dark:text-gray-400 dark:hover:text-white border border-white/60 dark:border-white/10 transition-all rounded-xl py-3 text-sm font-bold tracking-wider uppercase flex items-center justify-center gap-2 shadow-sm backdrop-blur-md"
                 >
-                  Send
+                  <span>💬</span> Open Chat
+                  {unreadChatCount > 0 && (
+                    <span className="bg-emerald-500 text-white px-2 py-0.5 rounded-full text-xs normal-case tracking-normal">
+                      {unreadChatCount} new
+                    </span>
+                  )}
                 </button>
-              </form>
-            </div>
-          )}
+              )}
 
-          {/* Action Buttons */}
-          {myColor && gameResult === null && (
-            <div className="flex gap-3 mt-4">
-              <button
-                onClick={() => {
-                  if (confirm("Are you sure you want to resign?")) {
-                    socket.send(JSON.stringify({ type: RESIGN }));
-                  }
-                }}
-                className="flex-1 bg-[#16181C] hover:bg-red-500/10 text-gray-400 hover:text-red-400 border border-white/10 hover:border-red-500/30 transition-all rounded-xl py-3 text-sm font-bold tracking-wider uppercase flex items-center justify-center gap-2"
-              >
-                <span>🏳️</span> Resign
-              </button>
+              {/* CHAT PANEL */}
+              {isChatOpen && (
+                <div className="bg-white/60 dark:bg-black/20 border border-white/50 dark:border-white/10 rounded-2xl flex flex-col backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex-1 min-h-[250px] overflow-hidden transition-colors relative">
+                  <div className="flex items-center justify-between bg-white/40 dark:bg-white/5 border-b border-white/60 dark:border-white/5 px-6 py-3 shadow-inner">
+                    <span className="text-sm font-bold uppercase tracking-wide text-neutral-600 dark:text-white/80">Live Chat</span>
+                    <button onClick={() => setIsChatOpen(false)} className="text-neutral-500 hover:text-neutral-800 dark:text-gray-400 dark:hover:text-white text-xl leading-none px-2">&times;</button>
+                  </div>
 
-              <button
-                onClick={() => {
-                  socket.send(JSON.stringify({ type: OFFER_DRAW }));
-                  alert("Draw offer sent to opponent.");
-                }}
-                className="flex-1 bg-[#16181C] hover:bg-blue-500/10 text-gray-400 hover:text-blue-400 border border-white/10 hover:border-blue-500/30 transition-all rounded-xl py-3 text-sm font-bold tracking-wider uppercase flex items-center justify-center gap-2"
-              >
-                <span>🤝</span> Offer Draw
-              </button>
+                  {/* Messages Area */}
+                  <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 scrollbar-thin scrollbar-thumb-neutral-300 dark:scrollbar-thumb-white/10 scrollbar-track-transparent min-h-[150px]">
+                    {chatMessages.length === 0 ? (
+                      <div className="m-auto text-xs font-medium text-neutral-400 dark:text-gray-500 italic">Say hi to your opponent!</div>
+                    ) : (
+                      chatMessages.map((msg, idx) => {
+                        const isMe = msg.sender === myColor;
+                        return (
+                          <div key={idx} className={`max-w-[85%] rounded-xl px-3 py-2 text-[13px] shadow-sm font-medium ${isMe ? 'bg-emerald-600 dark:bg-emerald-600 text-white self-end rounded-tr-sm' : 'bg-white/50 dark:bg-white/[0.05] text-neutral-800 dark:text-gray-200 self-start rounded-tl-sm border border-white/60 dark:border-white/5 backdrop-blur-md'}`}>
+                            {msg.text}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Input Area */}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!chatInput.trim()) return;
+                      socket.send(JSON.stringify({ type: CHAT_MESSAGE, payload: { text: chatInput.trim() } }));
+                      setChatInput("");
+                    }}
+                    className="p-3 bg-black/20 dark:bg-black/40 border-t border-white/10 dark:border-white/5 flex gap-2 transition-colors shadow-inner"
+                  >
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      placeholder="Type a message..."
+                      className="flex-1 bg-white/10 dark:bg-black/40 border border-white/20 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-white dark:text-white placeholder-neutral-400 dark:placeholder-gray-500 focus:outline-none focus:border-emerald-500/50 transition-colors shadow-inner backdrop-blur-md"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!chatInput.trim()}
+                      className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:hover:bg-emerald-600 text-white rounded-lg px-4 py-2 text-sm font-bold transition-colors shadow-sm"
+                    >
+                      Send
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    if (confirm("Are you sure you want to resign?")) {
+                      socket.send(JSON.stringify({ type: RESIGN }));
+                    }
+                  }}
+                  className="flex-1 bg-white/5 hover:bg-white/10 dark:bg-white/5 dark:hover:bg-red-500/10 text-neutral-300 hover:text-red-400 dark:text-gray-400 dark:hover:text-red-400 border border-white/10 hover:border-red-300 dark:border-white/5 dark:hover:border-red-500/30 transition-all rounded-xl py-3 text-sm font-bold tracking-wider uppercase flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(0,0,0,0.1)] backdrop-blur-md"
+                >
+                  <span>🏳️</span> Resign
+                </button>
+
+                <button
+                  onClick={() => {
+                    socket.send(JSON.stringify({ type: OFFER_DRAW }));
+                    alert("Draw offer sent to opponent.");
+                  }}
+                  className="flex-1 bg-white/5 hover:bg-white/10 dark:bg-white/5 dark:hover:bg-blue-500/10 text-neutral-300 hover:text-blue-400 dark:text-gray-400 dark:hover:text-blue-400 border border-white/10 hover:border-blue-300 dark:border-white/5 dark:hover:border-blue-500/30 transition-all rounded-xl py-3 text-sm font-bold tracking-wider uppercase flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(0,0,0,0.1)] backdrop-blur-md"
+                >
+                  <span>🤝</span> Offer Draw
+                </button>
+              </div>
             </div>
           )}
 
