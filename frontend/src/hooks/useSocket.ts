@@ -9,22 +9,37 @@ const WS_URL =
 const RECONNECT_DELAY_MS = 2000;
 
 export const useSocket = () => {
-  // Store the socket in state (not just a ref) so React re-renders consumers
-  // when the socket instance changes (critical for StrictMode double-mount).
   const [socket, setSocket] = useState<WebSocket | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeRef = useRef(true);
   const { token } = useAuth();
 
   useEffect(() => {
-    let active = true;
+    // Mark this effect instance as active
+    activeRef.current = true;
 
     const connect = () => {
-      if (!active) return;
+      if (!activeRef.current) return;
+
+      // Tear down any existing socket before creating a new one
+      if (wsRef.current && wsRef.current.readyState < WebSocket.CLOSING) {
+        // Remove handlers so the onclose doesn't trigger reconnect
+        wsRef.current.onclose = null;
+        wsRef.current.onerror = null;
+        wsRef.current.onopen = null;
+        wsRef.current.onmessage = null;
+        wsRef.current.close();
+      }
+      wsRef.current = null;
 
       const ws = new WebSocket(WS_URL);
+      wsRef.current = ws;
 
       ws.onopen = () => {
-        if (!active) {
+        if (!activeRef.current || wsRef.current !== ws) {
+          // This socket is stale — close it silently
+          ws.onclose = null;
           ws.close();
           return;
         }
@@ -33,16 +48,15 @@ export const useSocket = () => {
           ws.send(JSON.stringify({ type: "auth", payload: { token } }));
         }
 
-        // Setting socket in state triggers a re-render in all consumers,
-        // so effects that depend on the socket (like FIND_MATCH) correctly
-        // re-run with the new WebSocket instance.
         setSocket(ws);
-        console.log("WebSocket connected");
+        console.log("[useSocket] Connected");
       };
 
       ws.onclose = () => {
-        if (!active) return;
-        console.log("WebSocket closed. Reconnecting...");
+        if (!activeRef.current || wsRef.current !== ws) return;
+
+        console.log("[useSocket] Closed — scheduling reconnect");
+        wsRef.current = null;
         setSocket(null);
 
         reconnectRef.current = setTimeout(() => {
@@ -51,30 +65,35 @@ export const useSocket = () => {
       };
 
       ws.onerror = () => {
-        if (!active) return;
-        ws.close();
+        if (wsRef.current === ws) {
+          ws.close();
+        }
       };
     };
 
     connect();
 
     return () => {
-      active = false;
+      // Signal that this effect instance is no longer valid
+      activeRef.current = false;
+
+      // Cancel any pending reconnect timer
       if (reconnectRef.current) {
         clearTimeout(reconnectRef.current);
+        reconnectRef.current = null;
       }
-      // Null out state immediately so consumers (Game.tsx) know the socket
-      // is gone and don't try to send on the old closed socket.
+
+      // Close and discard the current socket
+      const ws = wsRef.current;
+      if (ws) {
+        ws.onclose = null; // prevent onclose from triggering reconnect
+        ws.onerror = null;
+        ws.onopen = null;
+        ws.close();
+        wsRef.current = null;
+      }
+
       setSocket(null);
-      // Close the current socket if there is one. The onclose handler will
-      // guard against calling setSocket again since active=false.
-      // We find it via the state setter callback to avoid a stale closure.
-      setSocket(prev => {
-        if (prev && prev.readyState < WebSocket.CLOSING) {
-          prev.close();
-        }
-        return null;
-      });
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

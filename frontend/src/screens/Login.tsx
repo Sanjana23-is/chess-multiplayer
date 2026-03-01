@@ -38,25 +38,31 @@ export const Login = () => {
     };
 
     return (
-        <div className="relative min-h-screen w-full text-neutral-900 dark:text-zinc-100 overflow-hidden flex items-center justify-center font-sans tracking-wide transition-colors duration-300">
+        <div className="relative min-h-screen w-full text-neutral-900 dark:text-zinc-100 overflow-hidden flex items-center justify-center font-sans tracking-wide transition-colors duration-300 animate-in fade-in duration-500">
 
-            {/* Abstract Background Blobs - Light Mode */}
-            <div className="dark:hidden absolute bottom-[-10%] left-[-10%] w-[60%] h-[70%] rounded-full bg-gradient-to-r from-cyan-300 to-blue-300 opacity-20 blur-[100px] pointer-events-none mix-blend-multiply" />
-            <div className="dark:hidden absolute top-[10%] left-[-5%] w-[40%] h-[50%] rounded-full bg-gradient-to-r from-pink-300 to-rose-300 opacity-20 blur-[100px] pointer-events-none mix-blend-multiply" />
-            <div className="dark:hidden absolute top-[-5%] right-[-5%] w-[55%] h-[65%] rounded-full bg-gradient-to-l from-emerald-200 to-teal-200 opacity-20 blur-[120px] pointer-events-none mix-blend-multiply" />
+            {/* Subtle dot-grid background for depth */}
+            <div className="dark:hidden absolute inset-0 bg-[radial-gradient(#00000012_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
+            <div className="hidden dark:block absolute inset-0 bg-[radial-gradient(#ffffff08_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
 
-            {/* Abstract Background Blobs - Dark Mode */}
-            <div className="hidden dark:block absolute bottom-[-10%] left-[-10%] w-[60%] h-[70%] rounded-full bg-gradient-to-r from-emerald-900 to-indigo-900 opacity-[0.15] blur-[100px] pointer-events-none" />
-            <div className="hidden dark:block absolute top-[10%] left-[-5%] w-[40%] h-[50%] rounded-full bg-gradient-to-r from-cyan-900 to-blue-900 opacity-[0.1] blur-[100px] pointer-events-none" />
-            <div className="hidden dark:block absolute top-[-5%] right-[-5%] w-[55%] h-[65%] rounded-full bg-gradient-to-l from-emerald-800 to-rose-900 opacity-[0.1] blur-[120px] pointer-events-none" />
+            {/* Background accent blobs */}
+            <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[70%] rounded-full bg-gradient-to-r from-emerald-500/10 to-cyan-500/5 blur-[120px] pointer-events-none" />
+            <div className="absolute top-[-5%] right-[-5%] w-[55%] h-[65%] rounded-full bg-gradient-to-l from-blue-500/8 to-purple-500/5 blur-[130px] pointer-events-none" />
 
             {/* Form Container */}
-            <div className="relative z-10 w-full max-w-[440px] mx-4 p-8 sm:p-10 bg-white/50 dark:bg-black/40 shadow-[0_8px_32px_rgba(0,0,0,0.06)] dark:shadow-2xl rounded-[32px] border border-white/60 dark:border-white/10 backdrop-blur-xl dark:backdrop-blur-xl transition-all duration-300">
-                <h2 className="text-[28px] font-extrabold text-neutral-900 dark:text-white text-center mb-1.5 tracking-tight transition-colors">
-                    Welcome Back
+            <div className="relative z-10 w-full max-w-[420px] mx-4 p-8 sm:p-10 bg-white dark:bg-[#13161C] shadow-[0_20px_60px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.5)] rounded-2xl border border-neutral-200/80 dark:border-white/[0.06] transition-all duration-300">
+                {/* Logo */}
+                <div className="flex items-center gap-2.5 justify-center mb-7">
+                    <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L9 7h6zM5 10l2-2 3 2v6H5zM14 10l3-2 2 2v6h-5zM5 18h14v3H5z" /></svg>
+                    </div>
+                    <span className="text-lg font-bold text-neutral-900 dark:text-white tracking-tight">Project Chess</span>
+                </div>
+
+                <h2 className="text-2xl font-bold text-neutral-900 dark:text-white text-center mb-1.5 tracking-tight">
+                    Welcome back
                 </h2>
-                <p className="text-[14px] font-medium text-neutral-500 dark:text-zinc-400 text-center mb-8 transition-colors">
-                    Sign in to your account to continue
+                <p className="text-sm text-neutral-500 dark:text-zinc-500 text-center mb-7">
+                    Sign in to continue playing
                 </p>
 
                 <form className="space-y-6" onSubmit={handleLogin}>
@@ -68,21 +74,21 @@ export const Login = () => {
 
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-[13px] font-bold text-neutral-700 dark:text-zinc-300 mb-2 px-1 tracking-wide transition-colors">
-                                Email Address
+                            <label className="block text-xs font-semibold text-neutral-500 dark:text-zinc-400 mb-1.5 uppercase tracking-wider">
+                                Email
                             </label>
                             <input
                                 type="email"
                                 required
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                placeholder="Enter your email"
-                                className="w-full px-4 py-3.5 bg-white/50 dark:bg-black/40 border border-white/60 dark:border-white/10 rounded-2xl text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 dark:focus:ring-emerald-500/50 transition-all font-medium text-[14px] shadow-sm transform hover:-translate-y-0.5"
+                                placeholder="you@example.com"
+                                className="w-full px-4 py-3 bg-neutral-50 dark:bg-[#0D1017] border border-neutral-200 dark:border-white/[0.07] rounded-xl text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50 transition-all text-sm font-medium"
                             />
                         </div>
 
                         <div>
-                            <label className="block text-[13px] font-bold text-neutral-700 dark:text-zinc-300 mb-2 px-1 tracking-wide transition-colors">
+                            <label className="block text-xs font-semibold text-neutral-500 dark:text-zinc-400 mb-1.5 uppercase tracking-wider">
                                 Password
                             </label>
                             <input
@@ -90,8 +96,8 @@ export const Login = () => {
                                 required
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Enter your password"
-                                className="w-full px-4 py-3.5 bg-white/50 dark:bg-black/40 border border-white/60 dark:border-white/10 rounded-2xl text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 dark:focus:ring-emerald-500/50 transition-all font-medium text-[14px] shadow-sm transform hover:-translate-y-0.5"
+                                placeholder="••••••••"
+                                className="w-full px-4 py-3 bg-neutral-50 dark:bg-[#0D1017] border border-neutral-200 dark:border-white/[0.07] rounded-xl text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50 transition-all text-sm font-medium"
                             />
                         </div>
                     </div>
@@ -99,19 +105,21 @@ export const Login = () => {
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full py-4 mt-2 bg-emerald-600 dark:bg-emerald-500 hover:bg-emerald-700 dark:hover:bg-emerald-400 text-white dark:text-[#0a0a0a] rounded-2xl font-bold text-[15px] transition-all duration-300 flex items-center justify-center disabled:opacity-70 shadow-lg shadow-emerald-500/20 transform hover:-translate-y-1 hover:shadow-emerald-500/30"
+                        className="w-full py-3.5 mt-1 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center disabled:opacity-60 shadow-[0_4px_16px_rgba(5,150,105,0.35)] hover:shadow-[0_8px_24px_rgba(5,150,105,0.45)] hover:-translate-y-0.5 active:translate-y-0"
                     >
-                        {isLoading ? "Signing In..." : "Sign In"}
+                        {isLoading ? (
+                            <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>Signing in...</span>
+                        ) : "Sign In"}
                     </button>
                 </form>
 
-                <div className="mt-8 text-center flex flex-col items-center gap-3">
-                    <button type="button" className="text-[13px] font-semibold text-neutral-500 dark:text-zinc-500 hover:text-neutral-700 dark:hover:text-zinc-300 transition-colors">
-                        Forgot your password?
-                    </button>
-                    <Link to="/register" className="text-[12px] font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors">
-                        Don't have an account? Sign up
-                    </Link>
+                <div className="mt-6 pt-6 border-t border-neutral-100 dark:border-white/[0.06] text-center">
+                    <p className="text-sm text-neutral-500 dark:text-zinc-500">
+                        New here?{" "}
+                        <Link to="/register" className="font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors">
+                            Create an account
+                        </Link>
+                    </p>
                 </div>
             </div>
         </div>
