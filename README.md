@@ -67,10 +67,10 @@ A full-stack, real-time multiplayer chess platform built from scratch. Players c
 └─────────────────────────────────┘
                          │
               ┌──────────▼──────────┐
-              │  PostgreSQL via      │
-              │  Prisma ORM          │
-              │  (users, games,      │
-              │   moves, ratings)    │
+              │  PostgreSQL via     │
+              │  Prisma ORM         │
+              │  (users, games,     │
+              │   moves, ratings)   │
               └─────────────────────┘
 ```
 
